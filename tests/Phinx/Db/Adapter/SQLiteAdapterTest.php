@@ -421,6 +421,7 @@ class SQLiteAdapterTest extends TestCase
             ['create table t(a integer primary key)', 'a', false],
             ['create table t(a integer references other(a))', 'a', true],
             ['create table t(a integer references other(b))', 'a', true],
+            ['create table t(a integer references other(b))', ['a'], true],
             ['create table t(a integer, foreign key(a) references other(a))', 'a', true],
             ['create table t(a integer, b integer, foreign key(a,b) references other(a,b))', 'a', false],
             ['create table t(a integer, b integer, foreign key(a,b) references other(a,b))', ['a', 'b'], true],
@@ -430,6 +431,8 @@ class SQLiteAdapterTest extends TestCase
             ['create table t(a integer, b integer, c integer, foreign key(a,b,c) references other(a,b,c))', ['a', 'b'], false],
             ['create table t(a integer, foreign key(a) references other(a))', ['a', 'b'], false],
             ['create table t(a integer references other(a), b integer references other(b))', ['a', 'b'], false],
+            ['create table t(a integer references other(a), b integer references other(b))', ['a', 'b'], false],
+            ['create table t(a integer); create temp table t(a integer references other(a))', ['a'], false],
         ];
     }
 
