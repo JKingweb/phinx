@@ -170,9 +170,10 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
 
     /**
      * @param string $tableName Table name
+     * @param bool $explicit Whether the implied schema should be resolved to either 'main' or 'temp'
      * @return array
      */
-    protected function getSchemaName($tableName)
+    protected function getSchemaName($tableName, $explicit = false)
     {
         if (preg_match("/.\.([^\.]+)$/", $tableName, $match)) {
             $table = $match[1];
@@ -180,8 +181,18 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
             $result = ['schema' => $schema, 'table' => $table];
         } else {
             $result = ['schema' => '', 'table' => $tableName];
+
+            if ($explicit) {
+                if ($this->hasTable("main.$tableName")) {
+                    $result['schema'] = 'main';
+                } elseif ($this->hasTable("temp.$tableName")) {
+                    $result['schema'] = 'temp';
+                } else {
+                    $result['schema'] = 'main';
+                }
+            }
         }
-        
+
         return $result;
     }
 
@@ -191,30 +202,29 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
     public function hasTable($tableName)
     {
         $spec = $this->getSchemaName($tableName);
-        switch ($spec['schema']) {
-            case 'main':
-            case '':
-                $master = 'sqlite_master';
-                break;
-            case 'temp':
-                $master = 'sqlite_temp_master';
-                break;
-            default:
-                $master = sprintf('%s.%s', $this->quoteColumnName($spec['schema']), 'sqlite_master');
+        if ($spec['schema'] === '') {
+            $master = 'sqlite_master';
+        } else {
+            $master = sprintf('%s.%s', $this->quoteColumnName($spec['schema']), 'sqlite_master');
         }
-        $table = $spec['table'];
+        $table = strtolower($spec['table']);
 
-        $tables = [];
         try {
-            $rows = $this->fetchAll(sprintf('SELECT name FROM %s WHERE type=\'table\' AND name=%s', $master, $this->quoteValue($table)));
+            $rows = $this->fetchAll(sprintf('SELECT name FROM %s WHERE type=\'table\' AND lower(name) = %s', $master, $this->quoteString($table)));
         } catch (\PDOException $e) {
+            // an exception can occur if the schema part of the table refers to a database which is not attached
             return false;
         }
+
+        // this somewhat pedantic check with strtolower is performed because the SQL lower function may be redefined,
+        // and can act on all Unicode characters if the ICU extension is loaded, while SQL identifiers are only case-insensitive for ASCII
         foreach ($rows as $row) {
-            $tables[] = strtolower($row[0]);
+            if (strtolower($row['name']) === $table) {
+                return true;
+            }
         }
 
-        return in_array(strtolower($table), $tables);
+        return false;
     }
 
     /**
@@ -795,7 +805,12 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
     {
         $primaryKey = [];
 
-        $rows = $this->fetchAll(sprintf('PRAGMA table_info(%s)', $this->quoteTableName($tableName)));
+        $info = $this->getSchemaName($tableName, true); // we must explicitly resolve the schema due to a bug in SQLite; see http://sqlite.1065341.n5.nabble.com/Bugs-in-foreign-key-list-pragma-tp107305.html
+        $rows = $this->fetchAll(sprintf(
+            'PRAGMA %s.table_info(%s)', 
+            $this->quoteColumnName($info['schema']),
+            $this->quoteColumnName($info['table'])
+        ));
 
         foreach ($rows as $row) {
             if ($row['pk'] > 0) {
@@ -837,7 +852,13 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
     protected function getForeignKeys($tableName)
     {
         $foreignKeys = [];
-        $rows = $this->fetchAll(sprintf('PRAGMA foreign_key_list(%s)', $this->quoteTableName($tableName)));
+
+        $info = $this->getSchemaName($tableName, true); // we must explicitly resolve the schema due to a bug in SQLite; see http://sqlite.1065341.n5.nabble.com/Bugs-in-foreign-key-list-pragma-tp107305.html
+        $rows = $this->fetchAll(sprintf(
+            'PRAGMA %s.foreign_key_list(%s)', 
+            $this->quoteColumnName($info['schema']),
+            $this->quoteColumnName($info['table'])
+        ));
 
         foreach ($rows as $row) {
             if (!isset($foreignKeys[$row['id']])) {

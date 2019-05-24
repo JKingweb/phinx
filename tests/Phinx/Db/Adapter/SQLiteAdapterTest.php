@@ -173,6 +173,7 @@ class SQLiteAdapterTest extends TestCase
 
     /** @dataProvider provideTableNamesForPresenceCheck
      *  @covers \Phinx\Db\Adapter\SQLiteAdapter::hasTable
+     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::quoteString
      *  @covers \Phinx\Db\Adapter\SQLiteAdapter::getSchemaName */
     public function testHasTable($createName, $tableName, $exp)
     {
@@ -184,9 +185,9 @@ class SQLiteAdapterTest extends TestCase
         $this->assertFalse($this->adapter->hasTable($tableName), sprintf('Adapter claims table %s exists when it does not', $tableName));
         $conn->exec(sprintf('CREATE TABLE %s (a text)', $createName));
         if ($exp == true) {
-            $this->assertTrue($this->adapter->hasTable($tableName), sprintf('Adapter claims table %s does not exist when it should', $tableName));
+            $this->assertTrue($this->adapter->hasTable($tableName), sprintf('Adapter claims table %s does not exist when it does', $tableName));
         } else {
-            $this->assertFalse($this->adapter->hasTable($tableName), sprintf('Adapter claims table %s exists when it should not', $tableName));
+            $this->assertFalse($this->adapter->hasTable($tableName), sprintf('Adapter claims table %s exists when it does not', $tableName));
         }
     }
 
@@ -203,11 +204,23 @@ class SQLiteAdapterTest extends TestCase
             'Wrong schema' => ['t', 'etc.t', false],
             'Missing schema' => ['t', 'not_attached.t', false],
             'Malicious table' => ['"\'"', '\'', true],
-            'Malicious missing table' => ['t', '\'', false]
+            'Malicious missing table' => ['t', '\'', false],
+            'Table name case 1' => ['t', 'T', true],
+            'Table name case 2' => ['T', 't', true],
+            'Schema name case 1' => ['main.t', 'MAIN.t', true],
+            'Schema name case 2' => ['MAIN.t', 'main.t', true],
+            'Schema name case 3' => ['temp.t', 'TEMP.t', true],
+            'Schema name case 4' => ['TEMP.t', 'temp.t', true],
+            'Schema name case 5' => ['etc.t', 'ETC.t', true],
+            'Schema name case 6' => ['ETC.t', 'etc.t', true],
+            'PHP zero string 1' => ['"0"', '0', true],
+            'PHP zero string 2' => ['"0"', '0e2', false],
+            'PHP zero string 3' => ['"0e2"', '0', false]
         ];
     }
 
     /** @dataProvider providePrimaryKeysToCheck
+     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::getSchemaName
      *  @covers \Phinx\Db\Adapter\SQLiteAdapter::hasPrimaryKey
      *  @covers \Phinx\Db\Adapter\SQLiteAdapter::getPrimaryKey */
     public function testHasPrimaryKey($tableDef, $key, $exp)
@@ -232,29 +245,35 @@ class SQLiteAdapterTest extends TestCase
             ['create table t(`a` integer PRIMARY KEY)', 'a', true],
             ['create table t(\'a\' integer PRIMARY KEY)', 'a', true],
             ['create table t(`a.a` integer PRIMARY KEY)', 'a.a', true],
-            ['create table t(`a` integer PRIMARY KEY)', ['a'], true],
-            ['create table t(`a` integer PRIMARY KEY)', ['a', 'b'], false],
-            ['create table t(`a` integer, PRIMARY KEY(a))', 'a', true],
-            ['create table t(`a` integer, PRIMARY KEY("a"))', 'a', true],
-            ['create table t(`a` integer, PRIMARY KEY([a]))', 'a', true],
-            ['create table t(`a` integer, PRIMARY KEY(`a`))', 'a', true],
-            ['create table t(`a` integer, `b` integer PRIMARY KEY)', 'a', false],
-            ['create table t(`a` integer, `b` text PRIMARY KEY)', 'b', true],
-            ['create table t(`a` integer, `b` integer default 2112 PRIMARY KEY)', ['a'], false],
-            ['create table t(`a` integer, `b` integer PRIMARY KEY)', ['b'], true],
-            ['create table t(`a` integer, `b` integer, PRIMARY KEY(`a`,`b`))', ['b', 'a'], true],
-            ['create table t(`a` integer, `b` integer, PRIMARY KEY(`a`,`b`))', ['a', 'b'], true],
-            ['create table t(`a` integer, `b` integer, PRIMARY KEY(`a`,`b`))', 'a', false],
-            ['create table t(`a` integer, `b` integer, PRIMARY KEY(`a`,`b`))', ['a'], false],
-            ['create table t(`a` integer, `b` integer, PRIMARY KEY(`a`,`b`))', ['a', 'b', 'c'], false],
-            ['create table t(`a` integer, `b` integer, PRIMARY KEY(`a`,`b`))', ['a', 'B'], true],
-            ['create table t(`a` integer, `B` integer, PRIMARY KEY(`a`,`b`))', ['a', 'b'], true],
-            ['create table t(`a` integer, `b` integer, constraint t_pk PRIMARY KEY(`a`,`b`))', ['a', 'b'], true],
+            ['create table t(a integer primary key)', ['a'], true],
+            ['create table t(a integer primary key)', ['a', 'b'], false],
+            ['create table t(a integer, primary key(a))', 'a', true],
+            ['create table t(a integer, primary key("a"))', 'a', true],
+            ['create table t(a integer, primary key([a]))', 'a', true],
+            ['create table t(a integer, primary key(`a`))', 'a', true],
+            ['create table t(a integer, b integer primary key)', 'a', false],
+            ['create table t(a integer, b text primary key)', 'b', true],
+            ['create table t(a integer, b integer default 2112 primary key)', ['a'], false],
+            ['create table t(a integer, b integer primary key)', ['b'], true],
+            ['create table t(a integer, b integer, primary key(a,b))', ['b', 'a'], true],
+            ['create table t(a integer, b integer, primary key(a,b))', ['a', 'b'], true],
+            ['create table t(a integer, b integer, primary key(a,b))', 'a', false],
+            ['create table t(a integer, b integer, primary key(a,b))', ['a'], false],
+            ['create table t(a integer, b integer, primary key(a,b))', ['a', 'b', 'c'], false],
+            ['create table t(a integer, b integer, primary key(a,b))', ['a', 'B'], true],
+            ['create table t(a integer, "B" integer, primary key(a,b))', ['a', 'b'], true],
+            ['create table t(a integer, b integer, constraint t_pk primary key(a,b))', ['a', 'b'], true],
+            ['create table t(a integer); create temp table t(a integer primary key)', 'a', false],
+            ['create temp table t(a integer primary key)', 'a', true],
+            ['create table t("0" integer primary key)', ['0'], true],
+            ['create table t("0" integer primary key)', ['0e0'], false],
+            ['create table t("0e0" integer primary key)', ['0'], false],
             ['create table not_t(a integer)', 'a', false] // test checks table t which does not exist
         ];
     }
 
     /** @dataProvider provideForeignKeysToCheck
+     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::getSchemaName
      *  @covers \Phinx\Db\Adapter\SQLiteAdapter::hasForeignKey
      *  @covers \Phinx\Db\Adapter\SQLiteAdapter::getForeignKeys */
     public function testHasForeignKey($tableDef, $key, $exp)
@@ -285,6 +304,10 @@ class SQLiteAdapterTest extends TestCase
             ['create table t(a integer references other(a), b integer references other(b))', ['a', 'b'], false],
             ['create table t(a integer references other(a), b integer references other(b))', ['a', 'b'], false],
             ['create table t(a integer); create temp table t(a integer references other(a))', ['a'], false],
+            ['create temp table t(a integer references other(a))', ['a'], true],
+            ['create table t("0" integer references other(a))', '0', true],
+            ['create table t("0" integer references other(a))', '0e0', false],
+            ['create table t("0e0" integer references other(a))', '0', false],
         ];
     }
 }
