@@ -196,12 +196,13 @@ class SQLiteAdapterTest extends TestCase
         return [
             'Ordinary table' => ['t', 't', true],
             'Ordinary table with schema' => ['t', 'main.t', true],
-            'Temporary table' => ['temp.t', 't', false],
+            'Temporary table' => ['temp.t', 't', true],
             'Temporary table with schema' => ['temp.t', 'temp.t', true],
-            'Attached table' => ['etc.t', 't', false],
+            'Attached table' => ['etc.t', 't', true],
             'Attached table with schema' => ['etc.t', 'etc.t', true],
             'Attached table with unusual schema' => ['"main.db".t', 'main.db.t', true],
-            'Wrong schema' => ['t', 'etc.t', false],
+            'Wrong schema 1' => ['t', 'etc.t', false],
+            'Wrong schema 2' => ['t', 'temp.t', false],
             'Missing schema' => ['t', 'not_attached.t', false],
             'Malicious table' => ['"\'"', '\'', true],
             'Malicious missing table' => ['t', '\'', false],
@@ -221,6 +222,7 @@ class SQLiteAdapterTest extends TestCase
 
     /** @dataProvider providePrimaryKeysToCheck
      *  @covers \Phinx\Db\Adapter\SQLiteAdapter::getSchemaName
+     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::getTableInfo
      *  @covers \Phinx\Db\Adapter\SQLiteAdapter::hasPrimaryKey
      *  @covers \Phinx\Db\Adapter\SQLiteAdapter::getPrimaryKey */
     public function testHasPrimaryKey($tableDef, $key, $exp)
@@ -263,7 +265,7 @@ class SQLiteAdapterTest extends TestCase
             ['create table t(a integer, b integer, primary key(a,b))', ['a', 'B'], true],
             ['create table t(a integer, "B" integer, primary key(a,b))', ['a', 'b'], true],
             ['create table t(a integer, b integer, constraint t_pk primary key(a,b))', ['a', 'b'], true],
-            ['create table t(a integer); create temp table t(a integer primary key)', 'a', false],
+            ['create table t(a integer); create temp table t(a integer primary key)', 'a', true],
             ['create temp table t(a integer primary key)', 'a', true],
             ['create table t("0" integer primary key)', ['0'], true],
             ['create table t("0" integer primary key)', ['0e0'], false],
@@ -274,6 +276,7 @@ class SQLiteAdapterTest extends TestCase
 
     /** @dataProvider provideForeignKeysToCheck
      *  @covers \Phinx\Db\Adapter\SQLiteAdapter::getSchemaName
+     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::getTableInfo
      *  @covers \Phinx\Db\Adapter\SQLiteAdapter::hasForeignKey
      *  @covers \Phinx\Db\Adapter\SQLiteAdapter::getForeignKeys */
     public function testHasForeignKey($tableDef, $key, $exp)
@@ -303,7 +306,7 @@ class SQLiteAdapterTest extends TestCase
             ['create table t(a integer, foreign key(a) references other(a))', ['a', 'b'], false],
             ['create table t(a integer references other(a), b integer references other(b))', ['a', 'b'], false],
             ['create table t(a integer references other(a), b integer references other(b))', ['a', 'b'], false],
-            ['create table t(a integer); create temp table t(a integer references other(a))', ['a'], false],
+            ['create table t(a integer); create temp table t(a integer references other(a))', ['a'], true],
             ['create temp table t(a integer references other(a))', ['a'], true],
             ['create table t("0" integer references other(a))', '0', true],
             ['create table t("0" integer references other(a))', '0e0', false],

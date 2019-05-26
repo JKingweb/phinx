@@ -170,10 +170,9 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
 
     /**
      * @param string $tableName Table name
-     * @param bool $explicit Whether the implied schema should be resolved to either 'main' or 'temp'
      * @return array
      */
-    protected function getSchemaName($tableName, $explicit = false)
+    protected function getSchemaName($tableName)
     {
         if (preg_match("/.\.([^\.]+)$/", $tableName, $match)) {
             $table = $match[1];
@@ -181,19 +180,17 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
             $result = ['schema' => $schema, 'table' => $table];
         } else {
             $result = ['schema' => '', 'table' => $tableName];
-
-            if ($explicit) {
-                if ($this->hasTable("main.$tableName")) {
-                    $result['schema'] = 'main';
-                } elseif ($this->hasTable("temp.$tableName")) {
-                    $result['schema'] = 'temp';
-                } else {
-                    $result['schema'] = 'main';
-                }
-            }
         }
 
         return $result;
+    }
+
+    protected function getTableInfo($tableName, $pragma = 'table_info')
+    {
+        $info = $this->getSchemaName($tableName);
+        $table = $info['table'];
+        $schema = strlen($info['schema']) ? $this->quoteColumnName($info['schema']) . '.' : '';
+        return $this->fetchAll(sprintf('PRAGMA %s%s(%s)', $schema, $pragma, $this->quoteColumnName($table)));
     }
 
     /**
@@ -201,26 +198,35 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
      */
     public function hasTable($tableName)
     {
-        $spec = $this->getSchemaName($tableName);
-        if ($spec['schema'] === '') {
-            $master = 'sqlite_master';
+        $info = $this->getSchemaName($tableName);
+        if ($info['schema'] === '') {
+            // if no schema is specified we search all schemata
+            $rows = $this->fetchAll('PRAGMA database_list;');
+            $schemata = [];
+            foreach ($rows as $row) {
+                $schemata[] = $row['name'];
+            }
         } else {
-            $master = sprintf('%s.%s', $this->quoteColumnName($spec['schema']), 'sqlite_master');
-        }
-        $table = strtolower($spec['table']);
-
-        try {
-            $rows = $this->fetchAll(sprintf('SELECT name FROM %s WHERE type=\'table\' AND lower(name) = %s', $master, $this->quoteString($table)));
-        } catch (\PDOException $e) {
-            // an exception can occur if the schema part of the table refers to a database which is not attached
-            return false;
+            // otherwise we search just the specified schema
+            $schemata = (array)$info['schema'];
         }
 
-        // this somewhat pedantic check with strtolower is performed because the SQL lower function may be redefined,
-        // and can act on all Unicode characters if the ICU extension is loaded, while SQL identifiers are only case-insensitive for ASCII
-        foreach ($rows as $row) {
-            if (strtolower($row['name']) === $table) {
-                return true;
+        $table = strtolower($info['table']);
+        foreach ($schemata as $schema) {
+            $master = sprintf('%s.%s', $this->quoteColumnName($schema), 'sqlite_master');
+            try {
+                $rows = $this->fetchAll(sprintf('SELECT name FROM %s WHERE type=\'table\' AND lower(name) = %s', $master, $this->quoteString($table)));
+            } catch (\PDOException $e) {
+                // an exception can occur if the schema part of the table refers to a database which is not attached
+                return false;
+            }
+
+            // this somewhat pedantic check with strtolower is performed because the SQL lower function may be redefined,
+            // and can act on all Unicode characters if the ICU extension is loaded, while SQL identifiers are only case-insensitive for ASCII
+            foreach ($rows as $row) {
+                if (strtolower($row['name']) === $table) {
+                    return true;
+                }
             }
         }
 
@@ -370,25 +376,83 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
     }
 
     /**
+     * 
+     * Parses a default-value expression to yield either a Literal representing 
+     * a string value, a string representing an expression, or some other scalar
+     * 
+     * @param mixed $v The default-value expression to interpret
+     * @param string $t The Phinx type of the column
+     * @return mixed
+     */
+    protected function parseDefaultValue($v, $t) 
+    {
+
+        if (is_null($v)) {
+            return null;
+        }
+
+        $matchPattern = function ($p, $v, &$m = null) {
+            // this whole process is complicated by an SQLite bug; see http://sqlite.1065341.n5.nabble.com/Bug-in-table-info-pragma-td107176.html
+            $out = preg_match("/^($p)(?:\s*(?:\/\*|--))?/i", $v, $m);
+            if ($m) {
+                array_shift($m);
+            }
+            return $out;
+        };
+
+        if ($matchPattern("'((?:[^']|'')*)'", $v, $m)) {
+            // string literal
+            return Literal::from(str_replace("''", "'", $m[1]));
+        } elseif ($matchPattern('true|false', $v)) {
+            // boolean literal (since SQLite 3.23)
+            return (strtolower($v[0]) === 't');
+        } elseif ($matchPattern('current_(?:date|time(?:stamp)?)', $v, $m)) {
+            // magic date/time keywords
+            return strtoupper($m[0]);
+        } elseif ($matchPattern("[-+]?(\d+(?:\.\d*)?|\.\d+)(e[-+]?\d+)?",$v, $m)) {
+            // decimal number; see https://sqlite.org/syntax/numeric-literal.html
+            if ($t === self::PHINX_TYPE_BOOLEAN) {
+                return (bool)(float)$m[0];
+            } elseif (abs(fmod((float)$m[0], 1)) > 0) {
+                return (float)$m[0];
+            } else {
+                return (int)$m[0];
+            }
+        } elseif ($matchPattern('null', $v)) {
+            // explicit null
+            return null;
+        } else {
+            // some other expression
+            // this includes blob literals, hexadecimal literals, and arbitrary expressions
+            return $v;
+        }
+    }
+
+    /**
      * {@inheritdoc}
      */
     public function getColumns($tableName)
     {
         $columns = [];
-        $rows = $this->fetchAll(sprintf('pragma table_info(%s)', $this->quoteTableName($tableName)));
+
+        $info = $this->getSchemaName($tableName, true);
+        $rows = $this->fetchAll(sprintf(
+            'PRAGMA %s.table_info(%s)', 
+            $this->quoteColumnName($info['schema']),
+            $this->quoteColumnName($info['table'])
+        ));
 
         foreach ($rows as $columnInfo) {
             $column = new Column();
-            $type = strtolower($columnInfo['type']);
+            $type = $this->getPhinxType(strtolower($columnInfo['type']));
+            $default = $this->parseDefaultValue($columnInfo['dflt_value'], $type['name']);
+            
             $column->setName($columnInfo['name'])
                    ->setNull($columnInfo['notnull'] !== '1')
-                   ->setDefault($columnInfo['dflt_value']);
-
-            $phinxType = $this->getPhinxType($type);
-
-            $column->setType($phinxType['name'])
-                   ->setLimit($phinxType['limit'])
-                   ->setScale($phinxType['scale']);
+                   ->setDefault($default)
+                   ->setType($type['name'])
+                   ->setLimit($type['limit'])
+                   ->setScale($type['scale']);
 
             if ($columnInfo['pk'] == 1) {
                 $column->setIdentity(true);
@@ -805,12 +869,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
     {
         $primaryKey = [];
 
-        $info = $this->getSchemaName($tableName, true); // we must explicitly resolve the schema due to a bug in SQLite; see http://sqlite.1065341.n5.nabble.com/Bugs-in-foreign-key-list-pragma-tp107305.html
-        $rows = $this->fetchAll(sprintf(
-            'PRAGMA %s.table_info(%s)', 
-            $this->quoteColumnName($info['schema']),
-            $this->quoteColumnName($info['table'])
-        ));
+        $rows = $this->getTableInfo($tableName);
 
         foreach ($rows as $row) {
             if ($row['pk'] > 0) {
@@ -853,12 +912,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
     {
         $foreignKeys = [];
 
-        $info = $this->getSchemaName($tableName, true); // we must explicitly resolve the schema due to a bug in SQLite; see http://sqlite.1065341.n5.nabble.com/Bugs-in-foreign-key-list-pragma-tp107305.html
-        $rows = $this->fetchAll(sprintf(
-            'PRAGMA %s.foreign_key_list(%s)', 
-            $this->quoteColumnName($info['schema']),
-            $this->quoteColumnName($info['table'])
-        ));
+        $rows = $this->getTableInfo($tableName, 'foreign_key_list');
 
         foreach ($rows as $row) {
             if (!isset($foreignKeys[$row['id']])) {
@@ -1105,8 +1159,8 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
      */
     public function getPhinxType($sqlTypeDef)
     {
-            $limit = null;
-            $scale = null;
+        $limit = null;
+        $scale = null;
         if (!preg_match('/^([a-z]+)(_(?:integer|float|text|blob))?(?:\((\d+)(?:,(\d+))?\))?$/i', $sqlTypeDef, $match)) {
             $type = Literal::from($sqlTypeDef);
         } else {
@@ -1193,14 +1247,14 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
                     // type is unknown
                     $type = Literal::from($type.$affinity);
             }
-            }
-
-            return [
-                'name' => $type,
-                'limit' => $limit,
-                'scale' => $scale
-            ];
         }
+
+        return [
+            'name' => $type,
+            'limit' => $limit,
+            'scale' => $scale
+        ];
+    }
 
     /**
      * {@inheritdoc}
