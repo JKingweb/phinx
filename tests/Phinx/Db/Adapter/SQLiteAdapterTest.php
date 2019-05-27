@@ -540,4 +540,30 @@ class SQLiteAdapterTest extends TestCase
             ['ACK_TEXT(12,2)',  ['name' => Literal::from('ACK_TEXT'), 'limit' => 12, 'scale' => 2]],
         ];
     }
+
+    public function testGetColumnTypes() {
+        $exp = [
+            SQLiteAdapter::PHINX_TYPE_BIG_INTEGER,
+            SQLiteAdapter::PHINX_TYPE_BINARY,
+            SQLiteAdapter::PHINX_TYPE_BLOB,
+            SQLiteAdapter::PHINX_TYPE_BOOLEAN,
+            SQLiteAdapter::PHINX_TYPE_CHAR,
+            SQLiteAdapter::PHINX_TYPE_DATE,
+            SQLiteAdapter::PHINX_TYPE_DATETIME,
+            SQLiteAdapter::PHINX_TYPE_DOUBLE,
+            SQLiteAdapter::PHINX_TYPE_FILESTREAM,
+            SQLiteAdapter::PHINX_TYPE_FLOAT,
+            SQLiteAdapter::PHINX_TYPE_INTEGER,
+            SQLiteAdapter::PHINX_TYPE_JSON,
+            SQLiteAdapter::PHINX_TYPE_JSONB,
+            SQLiteAdapter::PHINX_TYPE_SMALL_INTEGER,
+            SQLiteAdapter::PHINX_TYPE_STRING,
+            SQLiteAdapter::PHINX_TYPE_TEXT,
+            SQLiteAdapter::PHINX_TYPE_TIME,
+            SQLiteAdapter::PHINX_TYPE_UUID,
+            SQLiteAdapter::PHINX_TYPE_TIMESTAMP,
+            SQLiteAdapter::PHINX_TYPE_VARBINARY
+        ];
+        $this->assertEquals($exp, $this->adapter->getColumnTypes());
+    }
 }

@@ -45,6 +45,42 @@ use Phinx\Util\Literal;
  */
 class SQLiteAdapter extends PdoAdapter implements AdapterInterface
 {
+    protected static $supportedColumnTypes = [
+        self::PHINX_TYPE_BIG_INTEGER,
+        self::PHINX_TYPE_BINARY,
+        self::PHINX_TYPE_BLOB,
+        self::PHINX_TYPE_BOOLEAN,
+        self::PHINX_TYPE_CHAR,
+        self::PHINX_TYPE_DATE,
+        self::PHINX_TYPE_DATETIME,
+        self::PHINX_TYPE_DOUBLE,
+        self::PHINX_TYPE_FILESTREAM,
+        self::PHINX_TYPE_FLOAT,
+        self::PHINX_TYPE_INTEGER,
+        self::PHINX_TYPE_JSON,
+        self::PHINX_TYPE_JSONB,
+        self::PHINX_TYPE_SMALL_INTEGER,
+        self::PHINX_TYPE_STRING,
+        self::PHINX_TYPE_TEXT,
+        self::PHINX_TYPE_TIME,
+        self::PHINX_TYPE_UUID,
+        self::PHINX_TYPE_TIMESTAMP,
+        self::PHINX_TYPE_VARBINARY
+    ];
+    protected static $unsupportedColumnTypes = [
+        self::PHINX_TYPE_BIT,
+        self::PHINX_TYPE_CIDR,
+        self::PHINX_TYPE_DECIMAL,
+        self::PHINX_TYPE_ENUM,
+        self::PHINX_TYPE_GEOMETRY,
+        self::PHINX_TYPE_INET,
+        self::PHINX_TYPE_INTERVAL,
+        self::PHINX_TYPE_LINESTRING,
+        self::PHINX_TYPE_MACADDR,
+        self::PHINX_TYPE_POINT,
+        self::PHINX_TYPE_POLYGON,
+        self::PHINX_TYPE_SET
+    ];
     protected $definitionsWithLimits = [
         'CHAR',
         'CHARACTER',
@@ -1376,7 +1412,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
      */
     public function getColumnTypes()
     {
-        return array_merge(parent::getColumnTypes(), ['enum', 'json', 'jsonb']);
+        return self::$supportedColumnTypes;
     }
 
     /**
