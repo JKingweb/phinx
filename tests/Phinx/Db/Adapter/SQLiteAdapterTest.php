@@ -541,7 +541,9 @@ class SQLiteAdapterTest extends TestCase
         ];
     }
 
-    public function testGetColumnTypes() {
+    /** @covers \Phinx\Db\Adapter\SQLiteAdapter::getColumnTypes */
+    public function testGetColumnTypes()
+    {
         $exp = [
             SQLiteAdapter::PHINX_TYPE_BIG_INTEGER,
             SQLiteAdapter::PHINX_TYPE_BINARY,
@@ -565,5 +567,53 @@ class SQLiteAdapterTest extends TestCase
             SQLiteAdapter::PHINX_TYPE_VARBINARY
         ];
         $this->assertEquals($exp, $this->adapter->getColumnTypes());
+    }
+
+    /** @dataProvider provideColumnTypesForValidation
+     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::isValidColumnType */
+    public function testIsValidColumnType($phinxType, $exp) 
+    {
+        $col = (new Column)->setType($phinxType);
+        $this->assertSame($exp, $this->adapter->isValidColumnType($col));
+    }
+
+    public function provideColumnTypesForValidation()
+    {
+        return [
+            [SQLiteAdapter::PHINX_TYPE_BIG_INTEGER,   true],
+            [SQLiteAdapter::PHINX_TYPE_BINARY,        true],
+            [SQLiteAdapter::PHINX_TYPE_BLOB,          true],
+            [SQLiteAdapter::PHINX_TYPE_BOOLEAN,       true],
+            [SQLiteAdapter::PHINX_TYPE_CHAR,          true],
+            [SQLiteAdapter::PHINX_TYPE_DATE,          true],
+            [SQLiteAdapter::PHINX_TYPE_DATETIME,      true],
+            [SQLiteAdapter::PHINX_TYPE_DOUBLE,        true],
+            [SQLiteAdapter::PHINX_TYPE_FILESTREAM,    true],
+            [SQLiteAdapter::PHINX_TYPE_FLOAT,         true],
+            [SQLiteAdapter::PHINX_TYPE_INTEGER,       true],
+            [SQLiteAdapter::PHINX_TYPE_JSON,          true],
+            [SQLiteAdapter::PHINX_TYPE_JSONB,         true],
+            [SQLiteAdapter::PHINX_TYPE_SMALL_INTEGER, true],
+            [SQLiteAdapter::PHINX_TYPE_STRING,        true],
+            [SQLiteAdapter::PHINX_TYPE_TEXT,          true],
+            [SQLiteAdapter::PHINX_TYPE_TIME,          true],
+            [SQLiteAdapter::PHINX_TYPE_UUID,          true],
+            [SQLiteAdapter::PHINX_TYPE_TIMESTAMP,     true],
+            [SQLiteAdapter::PHINX_TYPE_VARBINARY,     true],
+            [SQLiteAdapter::PHINX_TYPE_BIT,           false],
+            [SQLiteAdapter::PHINX_TYPE_CIDR,          false],
+            [SQLiteAdapter::PHINX_TYPE_DECIMAL,       false],
+            [SQLiteAdapter::PHINX_TYPE_ENUM,          false],
+            [SQLiteAdapter::PHINX_TYPE_GEOMETRY,      false],
+            [SQLiteAdapter::PHINX_TYPE_INET,          false],
+            [SQLiteAdapter::PHINX_TYPE_INTERVAL,      false],
+            [SQLiteAdapter::PHINX_TYPE_LINESTRING,    false],
+            [SQLiteAdapter::PHINX_TYPE_MACADDR,       false],
+            [SQLiteAdapter::PHINX_TYPE_POINT,         false],
+            [SQLiteAdapter::PHINX_TYPE_POLYGON,       false],
+            [SQLiteAdapter::PHINX_TYPE_SET,           false],
+            [Literal::from('someType'),               true],
+            ['someType',                              false]
+        ];
     }
 }
