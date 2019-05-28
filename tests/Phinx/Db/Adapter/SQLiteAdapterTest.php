@@ -230,7 +230,7 @@ class SQLiteAdapterTest extends TestCase
         $this->assertFalse($this->adapter->hasTable('t'), 'Dirty test fixture');
         $conn = $this->adapter->getConnection();
         $conn->exec($tableDef);
-        $this->assertEquals($exp, $this->adapter->hasPrimaryKey('t', $key));
+        $this->assertSame($exp, $this->adapter->hasPrimaryKey('t', $key));
     }
 
     public function providePrimaryKeysToCheck()
@@ -284,7 +284,7 @@ class SQLiteAdapterTest extends TestCase
         $conn = $this->adapter->getConnection();
         $conn->exec('CREATE TABLE other(a integer, b integer, c integer)');
         $conn->exec($tableDef);
-        $this->assertEquals($exp, $this->adapter->hasForeignKey('t', $key));
+        $this->assertSame($exp, $this->adapter->hasForeignKey('t', $key));
     }
 
     public function provideForeignKeysToCheck()
@@ -614,6 +614,38 @@ class SQLiteAdapterTest extends TestCase
             [SQLiteAdapter::PHINX_TYPE_SET,           false],
             [Literal::from('someType'),               true],
             ['someType',                              false]
+        ];
+    }
+
+    /** @dataProvider provideColumnNamesToCheck
+     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::getSchemaName
+     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::getTableInfo
+     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::hasColumn */
+    public function testHasColumn($tableDef, $col, $exp)
+    {
+        $conn = $this->adapter->getConnection();
+        $conn->exec($tableDef);
+        $this->assertEquals($exp, $this->adapter->hasColumn('t', $col));
+    }
+
+    public function provideColumnNamesToCheck()
+    {
+        return [
+            ['create table t(a text)', 'a', true],
+            ['create table t(A text)', 'a', true],
+            ['create table t("a" text)', 'a', true],
+            ['create table t([a] text)', 'a', true],
+            ['create table t(\'a\' text)', 'a', true],
+            ['create table t("A" text)', 'a', true],
+            ['create table t(a text)', 'A', true],
+            ['create table t(b text)', 'a', false],
+            ['create table t(b text, a text)', 'a', true],
+            ['create table t("0" text)', '0', true],
+            ['create table t("0" text)', '0e0', false],
+            ['create table t("0e0" text)', '0', false],
+            ['create table t("0" text)', 0, true],
+            ['create table t(b text); create temp table t(a text)', 'a', true],
+            ['create table not_t(a text)', 'a', false],
         ];
     }
 }

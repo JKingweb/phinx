@@ -443,9 +443,6 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
         if ($matchPattern("'((?:[^']|'')*)'", $v, $m)) {
             // string literal
             return Literal::from(str_replace("''", "'", $m[1]));
-        } elseif ($matchPattern('true|false', $v)) {
-            // boolean literal (since SQLite 3.23)
-            return (strtolower($v[0]) === 't');
         } elseif ($matchPattern('current_(?:date|time(?:stamp)?)', $v, $m)) {
             // magic date/time keywords
             return strtoupper($m[0]);
@@ -458,12 +455,18 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
             } else {
                 return (int)$m[0];
             }
+        } elseif ($matchPattern('0x([0-9a-f]+)', $v, $m)) {
+            // hexadecimal literal
+            return hexdec($m[1]);
+        } elseif ($matchPattern('true|false', $v)) {
+            // boolean literal (since SQLite 3.23)
+            return (strtolower($v[0]) === 't');
         } elseif ($matchPattern('null', $v)) {
             // explicit null
             return null;
         } else {
             // some other expression
-            // this includes blob literals, hexadecimal literals, and arbitrary expressions
+            // this includes blob literals, and arbitrary expressions
             return $v;
         }
     }
@@ -475,16 +478,11 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
     {
         $columns = [];
 
-        $info = $this->getSchemaName($tableName, true);
-        $rows = $this->fetchAll(sprintf(
-            'PRAGMA %s.table_info(%s)', 
-            $this->quoteColumnName($info['schema']),
-            $this->quoteColumnName($info['table'])
-        ));
+        $rows = $this->getTableInfo($tableName);
 
         foreach ($rows as $columnInfo) {
             $column = new Column();
-            $type = $this->getPhinxType(strtolower($columnInfo['type']));
+            $type = $this->getPhinxType($columnInfo['type']);
             $default = $this->parseDefaultValue($columnInfo['dflt_value'], $type['name']);
             
             $column->setName($columnInfo['name'])
@@ -509,7 +507,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
      */
     public function hasColumn($tableName, $columnName)
     {
-        $rows = $this->fetchAll(sprintf('pragma table_info(%s)', $this->quoteTableName($tableName)));
+        $rows = $this->getTableInfo($tableName);
         foreach ($rows as $column) {
             if (strcasecmp($column['name'], $columnName) === 0) {
                 return true;
