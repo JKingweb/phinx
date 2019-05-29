@@ -274,6 +274,13 @@ class SQLiteAdapterTest extends TestCase
         ];
     }
 
+    /** @covers \Phinx\Db\Adapter\SQLiteAdapter::hasPrimaryKey */
+    public function testHasNamedPrimaryKey()
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->adapter->hasPrimaryKey('t', [], 'named_constraint');
+    }
+
     /** @dataProvider provideForeignKeysToCheck
      *  @covers \Phinx\Db\Adapter\SQLiteAdapter::getSchemaName
      *  @covers \Phinx\Db\Adapter\SQLiteAdapter::getTableInfo
@@ -312,6 +319,13 @@ class SQLiteAdapterTest extends TestCase
             ['create table t("0" integer references other(a))', '0e0', false],
             ['create table t("0e0" integer references other(a))', '0', false],
         ];
+    }
+
+    /** @covers \Phinx\Db\Adapter\SQLiteAdapter::hasForeignKey */
+    public function testHasNamedForeignKey()
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->adapter->hasForeignKey('t', [], 'named_constraint');
     }
 
     /** @dataProvider providePhinxTypes

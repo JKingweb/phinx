@@ -885,6 +885,10 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
      */
     public function hasPrimaryKey($tableName, $columns, $constraint = null)
     {
+        if (!is_null($constraint)) {
+            throw new \InvalidArgumentException('SQLite does not support named constraints.');
+        }
+
         $columns = array_map('strtolower', (array)$columns);
         $primaryKey = array_map('strtolower', $this->getPrimaryKey($tableName));
 
@@ -923,6 +927,10 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
      */
     public function hasForeignKey($tableName, $columns, $constraint = null)
     {
+        if (!is_null($constraint)) {
+            throw new \InvalidArgumentException('SQLite does not support named constraints.');
+        }
+
         $columns = array_map('strtolower', (array)$columns);
         $foreignKeys = $this->getForeignKeys($tableName);
 
