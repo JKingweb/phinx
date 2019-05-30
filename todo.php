@@ -59,7 +59,6 @@ interface AdapterInterface
     public function createSchemaTable();
     public function getAdapterType();
     public function connect();
-    public function disconnect();
     public function execute($sql);
     public function executeActions(Table $table, array $actions);
     public function getQueryBuilder();
@@ -71,10 +70,6 @@ interface AdapterInterface
     public function createTable(Table $table, array $columns = [], array $indexes = []);
     public function truncateTable($tableName);
     public function getColumns($tableName);
-    public function hasColumn($tableName, $columnName);
-    public function hasIndex($tableName, $columns);
-    public function hasIndexByName($tableName, $indexName);
-    public function isValidColumnType(Column $column);
     public function createDatabase($name, $options = []);
     public function hasDatabase($name);
     public function dropDatabase($name);
