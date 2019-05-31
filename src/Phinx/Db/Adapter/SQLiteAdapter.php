@@ -68,6 +68,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
         self::PHINX_TYPE_TIMESTAMP => 'timestamp_text',
         self::PHINX_TYPE_VARBINARY => 'varbinary_blob'
     ];
+
     // list of known but unsupported Phinx column types
     protected static $unsupportedColumnTypes = [
         self::PHINX_TYPE_BIT,
@@ -84,6 +85,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
         self::PHINX_TYPE_POLYGON,
         self::PHINX_TYPE_SET
     ];
+
     protected $definitionsWithLimits = [
         'CHAR',
         'CHARACTER',
@@ -95,6 +97,29 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
     ];
 
     protected $suffix = '.sqlite3';
+
+    /** Indicates whether the database library version is at least the specified version
+     * 
+     * @param string $ver The version to check against e.g. '3.28.0'
+     * @return boolean
+     */
+    public function databaseVersionAtLeast($ver)
+    {
+        $ver = array_map('intval', explode('.', $ver));
+        $actual = $this->query('SELECT sqlite_version()')->fetchColumn();
+        $actual = array_map('intval', explode('.', $actual));
+        $actual = array_pad($actual, sizeof($ver), 0);
+
+        for ($a = 0; $a < sizeof($ver); $a++) {
+            if ($actual[$a] < $ver[$a]) {
+                return false;
+            } elseif ($actual[$a] > $ver[$a]) {
+                return true;
+            }
+        }
+
+        return true;
+    }
 
     /**
      * {@inheritdoc}

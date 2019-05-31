@@ -724,4 +724,24 @@ class SQLiteAdapterTest extends TestCase
             ['create table not_t(a text)', 'a', false],
         ];
     }
+
+    /** @dataProvider provideDatabaseVersionStrings
+     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::databaseVersionAtLeast */
+    public function testDatabaseVersionAtLeast($ver, $exp)
+    {
+        $this->assertSame($exp, $this->adapter->databaseVersionAtLeast($ver));
+    }
+
+    public function provideDatabaseVersionStrings()
+    {
+        return [
+            ["2", true],
+            ["3", true],
+            ["4", false],
+            ["3.0", true],
+            ["3.0.0.0.0.0", true],
+            ["3.0.0.0.0.99999", true],
+            ["3.9999", false],
+        ];
+    }
 }
