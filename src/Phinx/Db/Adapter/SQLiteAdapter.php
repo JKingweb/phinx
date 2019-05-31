@@ -228,10 +228,10 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
     }
 
     /**
-     * Searches through all available schemata to find a table and returns an array 
+     * Searches through all available schemata to find a table and returns an array
      * containing the bare schema name and whether the table exists at all.
      * If no schema was specified and the table does not exist the "main" schema is returned
-     * 
+     *
      * @param string $tableName The name of the table to find
      * @return array
      */
@@ -282,7 +282,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
     }
 
     /**
-     * Returns the SQLite "master" table which contains information about 
+     * Returns the SQLite "master" table which contains information about
      * objects (viz. indices, views, triggers) associated with a table
      */
     protected function getMasterTable($tableName)
@@ -452,15 +452,15 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
     }
 
     /**
-     * 
-     * Parses a default-value expression to yield either a Literal representing 
+     *
+     * Parses a default-value expression to yield either a Literal representing
      * a string value, a string representing an expression, or some other scalar
-     * 
+     *
      * @param mixed $v The default-value expression to interpret
      * @param string $t The Phinx type of the column
      * @return mixed
      */
-    protected function parseDefaultValue($v, $t) 
+    protected function parseDefaultValue($v, $t)
     {
 
         if (is_null($v)) {
@@ -482,7 +482,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
         } elseif ($matchPattern('current_(?:date|time(?:stamp)?)', $v, $m)) {
             // magic date/time keywords
             return strtoupper($m[0]);
-        } elseif ($matchPattern("[-+]?(\d+(?:\.\d*)?|\.\d+)(e[-+]?\d+)?",$v, $m)) {
+        } elseif ($matchPattern("[-+]?(\d+(?:\.\d*)?|\.\d+)(e[-+]?\d+)?", $v, $m)) {
             // decimal number; see https://sqlite.org/syntax/numeric-literal.html
             if ($t === self::PHINX_TYPE_BOOLEAN) {
                 return (bool)(float)$m[0];
@@ -822,7 +822,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
 
     /**
      * Finds the name of a table's index matching the supplied columns
-     * 
+     *
      * @param string $tableName The table to which the index belongs
      * @param string|string[] $columns The columns of the index
      * @return string|null

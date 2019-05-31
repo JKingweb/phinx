@@ -1615,7 +1615,8 @@ OUTPUT;
         $this->assertEquals(1, $stm->rowCount());
     }
 
-    public function testLiteralSupport() {
+    public function testLiteralSupport()
+    {
         $createQuery = <<<'INPUT'
 CREATE TABLE `test` (`double_col` double NOT NULL)
 INPUT;

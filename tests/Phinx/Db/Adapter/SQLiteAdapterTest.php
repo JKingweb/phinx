@@ -61,7 +61,7 @@ class SQLiteAdapterTest extends TestCase
         $this->assertNull($this->adapter->disconnect(), 'Interface violation');
         $conn2 = $this->adapter->getConnection();
         $this->assertNotSame($conn1, $conn2, 'Disconnection did not occur');
-        $this->assertEquals(0, $conn2->query('PRAGMA user_version')->fetchColumn(), 'Disconnection did not occur');        
+        $this->assertEquals(0, $conn2->query('PRAGMA user_version')->fetchColumn(), 'Disconnection did not occur');
     }
 
     /** @covers \Phinx\Db\Adapter\SQLiteAdapter::hasTransactions */
@@ -70,7 +70,7 @@ class SQLiteAdapterTest extends TestCase
         $this->assertTrue($this->adapter->hasTransactions());
     }
 
-    /** @covers \Phinx\Db\Adapter\SQLiteAdapter::beginTransaction 
+    /** @covers \Phinx\Db\Adapter\SQLiteAdapter::beginTransaction
      *  @covers \Phinx\Db\Adapter\SQLiteAdapter::rollbackTransaction
      *  @covers \Phinx\Db\Adapter\SQLiteAdapter::commitTransaction
     */
@@ -110,7 +110,7 @@ class SQLiteAdapterTest extends TestCase
 
     public function provideTableNamesForQuoting()
     {
-        // NOTE: This test-set is pedantic: though quoting identifiers with [] or ` is allowed by SQLite, 
+        // NOTE: This test-set is pedantic: though quoting identifiers with [] or ` is allowed by SQLite,
         // this is non-standard and is not guaranteed to work in SQLite 4; the test errs on the side of long-term compatibility
         return [
             ['t', '"t"'],
@@ -146,7 +146,7 @@ class SQLiteAdapterTest extends TestCase
 
     public function provideColumnNamesForQuoting()
     {
-        // NOTE: This test-set is pedantic: though quoting identifiers with [] or ` is allowed by SQLite, 
+        // NOTE: This test-set is pedantic: though quoting identifiers with [] or ` is allowed by SQLite,
         // this is non-standard and is not guaranteed to work in SQLite 4; the test errs on the side of long-term compatibility
         return [
             ['t', '"t"'],
@@ -647,7 +647,7 @@ class SQLiteAdapterTest extends TestCase
 
     /** @dataProvider provideColumnTypesForValidation
      *  @covers \Phinx\Db\Adapter\SQLiteAdapter::isValidColumnType */
-    public function testIsValidColumnType($phinxType, $exp) 
+    public function testIsValidColumnType($phinxType, $exp)
     {
         $col = (new Column)->setType($phinxType);
         $this->assertSame($exp, $this->adapter->isValidColumnType($col));

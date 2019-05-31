@@ -337,7 +337,8 @@ class TableTest extends TestCase
      * @param string $indexIdentifier
      * @param Index $index
      */
-    public function testRemoveIndex($indexIdentifier, Index $index) {
+    public function testRemoveIndex($indexIdentifier, Index $index)
+    {
         $adapterStub = $this->getMockBuilder('\Phinx\Db\Adapter\MysqlAdapter')
             ->setConstructorArgs([[]])
             ->getMock();
@@ -345,14 +346,15 @@ class TableTest extends TestCase
         $table = new \Phinx\Db\Table('table', [], $adapterStub);
         $table->removeIndex($indexIdentifier);
 
-        $indexes = array_map(function(DropIndex $action) {
+        $indexes = array_map(function (DropIndex $action) {
             return $action->getIndex();
         }, $this->getPendingActions($table));
 
         $this->assertEquals([$index], $indexes);
     }
 
-    public function removeIndexDataprovider() {
+    public function removeIndexDataprovider()
+    {
         return [
             [
                 'indexA',
