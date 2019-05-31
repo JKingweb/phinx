@@ -45,33 +45,36 @@ use Phinx\Util\Literal;
  */
 class SQLiteAdapter extends PdoAdapter implements AdapterInterface
 {
+    // list of supported Phinx column types with their SQL equivalents
+    // some types have an affinity appended to ensure they do not receive NUMERIC affinity
     protected static $supportedColumnTypes = [
-        self::PHINX_TYPE_BIG_INTEGER,
-        self::PHINX_TYPE_BINARY,
-        self::PHINX_TYPE_BLOB,
-        self::PHINX_TYPE_BOOLEAN,
-        self::PHINX_TYPE_CHAR,
-        self::PHINX_TYPE_DATE,
-        self::PHINX_TYPE_DATETIME,
-        self::PHINX_TYPE_DOUBLE,
-        self::PHINX_TYPE_FILESTREAM,
-        self::PHINX_TYPE_FLOAT,
-        self::PHINX_TYPE_INTEGER,
-        self::PHINX_TYPE_JSON,
-        self::PHINX_TYPE_JSONB,
-        self::PHINX_TYPE_SMALL_INTEGER,
-        self::PHINX_TYPE_STRING,
-        self::PHINX_TYPE_TEXT,
-        self::PHINX_TYPE_TIME,
-        self::PHINX_TYPE_UUID,
-        self::PHINX_TYPE_TIMESTAMP,
-        self::PHINX_TYPE_VARBINARY
+        self::PHINX_TYPE_BIG_INTEGER => 'biginteger',
+        self::PHINX_TYPE_BINARY => 'binary_blob',
+        self::PHINX_TYPE_BLOB => 'blob',
+        self::PHINX_TYPE_BOOLEAN => 'boolean_integer',
+        self::PHINX_TYPE_CHAR => 'char',
+        self::PHINX_TYPE_DATE => 'date_text',
+        self::PHINX_TYPE_DATETIME => 'datetime_text',
+        self::PHINX_TYPE_DOUBLE => 'double',
+        self::PHINX_TYPE_FLOAT => 'float',
+        self::PHINX_TYPE_INTEGER => 'integer',
+        self::PHINX_TYPE_JSON => 'json_text',
+        self::PHINX_TYPE_JSONB => 'jsonb_text',
+        self::PHINX_TYPE_SMALL_INTEGER => 'smallinteger',
+        self::PHINX_TYPE_STRING => 'varchar',
+        self::PHINX_TYPE_TEXT => 'text',
+        self::PHINX_TYPE_TIME => 'time_text',
+        self::PHINX_TYPE_UUID => 'uuid_text',
+        self::PHINX_TYPE_TIMESTAMP => 'timestamp_text',
+        self::PHINX_TYPE_VARBINARY => 'varbinary_blob'
     ];
+    // list of known but unsupported Phinx column types
     protected static $unsupportedColumnTypes = [
         self::PHINX_TYPE_BIT,
         self::PHINX_TYPE_CIDR,
         self::PHINX_TYPE_DECIMAL,
         self::PHINX_TYPE_ENUM,
+        self::PHINX_TYPE_FILESTREAM,
         self::PHINX_TYPE_GEOMETRY,
         self::PHINX_TYPE_INET,
         self::PHINX_TYPE_INTERVAL,
@@ -1191,73 +1194,15 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
      */
     public function getSqlType($type, $limit = null)
     {
-        $name = $type;
-        $affinity = '';
-        // first decide if a type is supported, and if so its affinity
-        // type-names which naturally match an affinity don't need to have it added
-        // see https://sqlite.org/datatype3.html#type_affinity for details on affinity
-        switch ($type) {
-            case self::PHINX_TYPE_STRING:
-                $name = "varchar";
-                break;
-            case self::PHINX_TYPE_CHAR:
-            case self::PHINX_TYPE_TEXT:
-                break;
-            case self::PHINX_TYPE_DATETIME:
-            case self::PHINX_TYPE_TIMESTAMP:
-            case self::PHINX_TYPE_TIME:
-            case self::PHINX_TYPE_DATE:
-                // dates and times are not a distinct type, but one can still make useful comparisons
-                $affinity = 'text';
-                break;
-            case self::PHINX_TYPE_JSON:
-            case self::PHINX_TYPE_JSONB:
-            case self::PHINX_TYPE_UUID:
-                // SQLite does have a JSON extension, and UUIDs are opaque
-                $affinity = 'text';
-                break;
-            case self::PHINX_TYPE_SMALL_INTEGER:
-            case self::PHINX_TYPE_INTEGER:
-            case self::PHINX_TYPE_BIG_INTEGER:
-                // NOTE: any identity column should always have the type "INTEGER" regardless of size
-                break;
-            case self::PHINX_TYPE_FLOAT:
-            case self::PHINX_TYPE_DOUBLE:
-                break;
-            case self::PHINX_TYPE_BLOB:
-                break;
-            case self::PHINX_TYPE_BINARY:
-            case self::PHINX_TYPE_VARBINARY:
-            case self::PHINX_TYPE_FILESTREAM:
-                $affinity = 'blob';
-                break;
-            case self::PHINX_TYPE_BOOLEAN:
-                $affinity = 'integer';
-                break;
-            case self::PHINX_TYPE_DECIMAL:
-                // SQLite does not support fixed-point numbers, and to silently provide floating-point instead probably would not be helpful
-            case self::PHINX_TYPE_BIT:
-                // while a bit-field could be encoded as an integer, it would not have equivalent semantics to MySQL's type
-            case self::PHINX_TYPE_GEOMETRY:
-            case self::PHINX_TYPE_POINT:
-            case self::PHINX_TYPE_LINESTRING:
-            case self::PHINX_TYPE_POLYGON:
-                // SQLite does have a spatial extension; someone more familiar with it would need to ascertain whether declaring these types is at all useful
-            case self::PHINX_TYPE_ENUM:
-            case self::PHINX_TYPE_SET:
-                // there is no way to reliably replicate the behaviour of SQLite enums or sets; the PostgreSQL adapter doesn't try, either
-            case self::PHINX_TYPE_CIDR:
-            case self::PHINX_TYPE_INET:
-            case self::PHINX_TYPE_MACADDR:
-            case self::PHINX_TYPE_INTERVAL:
-                throw new UnsupportedColumnTypeException('Column type "' . $type . '" is not supported by SQLite.');
-            default:
-                throw new UnsupportedColumnTypeException('Column type "' . $type . '" is unknown.');
-        }
-        
-        // return the Phinx type with the affinity appended, if necessary
-        if ($affinity) {
-            $name = sprintf('%s_%s', $name, $affinity);
+        $typeLC = strtolower($type);
+        if ($type instanceof Literal) {
+            $name = $type;
+        } elseif (isset(self::$supportedColumnTypes[$typeLC])) {
+            $name = self::$supportedColumnTypes[$typeLC];
+        } elseif (in_array($typeLC, self::$unsupportedColumnTypes)) {
+            throw new UnsupportedColumnTypeException('Column type "' . $type . '" is not supported by SQLite.');
+        } else {
+            throw new UnsupportedColumnTypeException('Column type "' . $type . '" is not known by SQLite.');
         }
         return ['name' => $name, 'limit' => $limit];
     }
@@ -1335,7 +1280,6 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
                 case self::PHINX_TYPE_BLOB:
                 case self::PHINX_TYPE_BINARY:
                 case self::PHINX_TYPE_VARBINARY:
-                case self::PHINX_TYPE_FILESTREAM:
                 case self::PHINX_TYPE_BOOLEAN:
                     $type = strtolower($type);
                     break;
@@ -1351,6 +1295,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
                 case self::PHINX_TYPE_INET:
                 case self::PHINX_TYPE_MACADDR:
                 case self::PHINX_TYPE_INTERVAL:
+                case self::PHINX_TYPE_FILESTREAM:
                     // type is not supported, but we pass it through anyway
                     $type = Literal::from(strtolower($type));
                     break;
@@ -1487,7 +1432,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
      */
     public function getColumnTypes()
     {
-        return self::$supportedColumnTypes;
+        return array_keys(self::$supportedColumnTypes);
     }
 
     /**
