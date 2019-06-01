@@ -606,23 +606,21 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
             // if all the names of the magic rowid column are used as names for concrete columns, we have to look at the SQL to know if a table is a WITHOUT ROWID table
             // the pattern used here should cover all possible permutations, though it is rather complicated
             $pattern = <<<PCRE_PATTERN
-                /^(?:                           # Any of...
-                    \s+|                        # Whitespace
-                    '(?:[^']|'')*'|             # String literal
-                    "(?:[^"]|"")*"|             # Standard identifier
-                    `(?:[^`]|``)*`|             # MySQL identifier
-                    \[[^\]]*\]|                 # SQL Server identifier
-                    --[^\r\n]*|                 # Single-line comment
-                    \/\*(?:*(?!\/)|[^\*])*\*\/| # Multi-line comment
-                    .                           # Anything else
-                )*?                             # Zero or more times, followed by...
-                WITHOUT\s+ROWID                 # the WITHOUT ROWID definition
-                (?:                             # Followed by any of...
-                    \s+|                        # Whitespace
-                    --[^\r\n]*|                 # Single-line comment
-                    \/\*(?:*(?!\/)|[^\*])*\*\/  # Multi-line comment
-                )*                              # Zero or more times
-                ;\$                             # And ending with the terminal semicolon
+                /^(?:                               # Any of...
+                    (?P<ws>                         # Whitespace, which can be...
+                        \s+|                        # Literal whitespace
+                        --[^\r\n]*|                 # Single-line comment
+                        \/\*(?:*(?!\/)|[^\*])*\*\/  # Multi-line comment
+                    )|
+                    '(?:[^']|'')*'|                 # String literal
+                    "(?:[^"]|"")*"|                 # Standard identifier
+                    `(?:[^`]|``)*`|                 # MySQL identifier
+                    \[[^\]]*\]|                     # SQL Server identifier
+                    .                               # Anything else
+                )*?                                 # Zero or more times, followed by...
+                WITHOUT(?P=ws)+ROWID                # the WITHOUT ROWID definition
+                (?P=ws)*                            # Followed by whitespace zero or more times
+                ;\$                                 # And ending with the terminal semicolon
                 /six
 PCRE_PATTERN;
             $tableBareName = $this->getSchemaName($tableName)['table'];
