@@ -543,6 +543,103 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
     }
 
     /**
+     * Returns the name of the specified table's identity column, or null if the table has no identity
+     * 
+     * The process of finding an identity column is somewhat convoluted as SQLite has no direct way of querying whether a given column is an alias for the table's row ID
+     *
+     * @param string $tableName The name of the table
+     * @return string|null
+     */
+    protected function resolveIdentity($tableName)
+    {
+        $result = null;
+        $rowidNames = [
+            '_rowid_' => true,
+            'rowid' => true,
+            'oid' => true,
+        ];
+        // make sure the table has only one primary key column which is of type integer
+        foreach ($this->getTableInfo($tableName) as $col) {
+            $name = strtolower($col['name']);
+            $type = strtolower($col['type']);
+            if (isset($rowidNames[$name])) {
+                // the column is using one of the names which may be used to refer to a row ID; 
+                // it cannot be used to find out whether a table is a WITHOUT ROWID table
+                $rowidNames[$name] = false;
+            }
+            if ($col['pk'] > 1) {
+                // the table has a composite primary key
+                return null;
+            } elseif ($col['pk'] == 0) {
+                // the column is not a primary key column and is thus not relevant
+                continue;
+            } elseif ($type !== 'integer') {
+                // if the primary key's type is not exactly INTEGER, it cannot be a row ID alias
+                return null;
+            } else {
+                // the column is a candidate for a row ID alias
+                $result = $col['name'];
+            }
+        }
+        // if there is no suitable PK column, stop now
+        if (is_null($result)) {
+            return null;
+        }
+        // make sure the table does not have a PK-origin autoindex
+        // such an autoindex would indicate either that the primary key was specified as a table constraint or that it was specified as descending
+        foreach ($this->getTableInfo($tableName, 'index_list') as $idx) {
+            if ($idx['origin'] === 'pk') {
+                return null;
+            }
+        }
+        // make sure the table is not a WITHOUT ROWID table; these cannot have auto-incrementing IDs
+        $rowidNames = array_filter($rowidNames);
+        if ($rowidNames) {
+            // try to count the magic rowid column, unless all its names have been explicitly used
+            // performing this count on a WITHOUT ROWID table will produce an error
+            try {
+                $this->execute(sprintf('SELECT count(%s) from %s', array_keys($rowidNames)[0], $this->quoteTableName($tableName)));
+            } catch (\PDOException $e) {
+                return null;
+            }
+        } else {
+            // if all the names of the magic rowid column are used as names for concrete columns, we have to look at the SQL to know if a table is a WITHOUT ROWID table
+            // the pattern used here should cover all possible permutations, though it is rather complicated
+            $pattern = <<<PCRE_PATTERN
+                /^(?:                           # Any of...
+                    \s+|                        # Whitespace
+                    '(?:[^']|'')*'|             # String literal
+                    "(?:[^"]|"")*"|             # Standard identifier
+                    `(?:[^`]|``)*`|             # MySQL identifier
+                    \[[^\]]*\]|                 # SQL Server identifier
+                    --[^\r\n]*|                 # Single-line comment
+                    \/\*(?:*(?!\/)|[^\*])*\*\/| # Multi-line comment
+                    .                           # Anything else
+                )*?                             # Zero or more times, followed by...
+                WITHOUT\s+ROWID                 # the WITHOUT ROWID definition
+                (?:                             # Followed by any of...
+                    \s+|                        # Whitespace
+                    --[^\r\n]*|                 # Single-line comment
+                    \/\*(?:*(?!\/)|[^\*])*\*\/  # Multi-line comment
+                )*                              # Zero or more times
+                ;\$                             # And ending with the terminal semicolon
+                /six
+PCRE_PATTERN;
+            $tableBareName = $this->getSchemaName($tableName)['table'];
+            $sql = $this->query(sprintf(
+                'select sql from %s where type = \'table\' and name = %s',
+                $this->getMasterTable($tableName),
+                $this->quoteString($tableBareName)
+            ))->fetchColumn();
+            if (preg_match($pattern, $sql)) {
+                // the table is a WITHOUT ROWID table and cannot have a rowid alias
+                return null;
+            }
+        }
+        return $result;
+    }
+
+    /**
      * {@inheritdoc}
      */
     public function getColumns($tableName)
@@ -550,6 +647,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
         $columns = [];
 
         $rows = $this->getTableInfo($tableName);
+        $identity = $this->resolveIdentity($tableName);
 
         foreach ($rows as $columnInfo) {
             $column = new Column();
@@ -563,7 +661,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
                    ->setLimit($type['limit'])
                    ->setScale($type['scale']);
 
-            if ($columnInfo['pk'] == 1) {
+            if ($columnInfo['name'] === $identity) {
                 $column->setIdentity(true);
             }
 
