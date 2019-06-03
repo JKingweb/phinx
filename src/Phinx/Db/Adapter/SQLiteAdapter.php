@@ -1338,7 +1338,10 @@ PCRE_PATTERN;
     {
         $limit = null;
         $scale = null;
-        if (!preg_match('/^([a-z]+)(_(?:integer|float|text|blob))?(?:\((\d+)(?:,(\d+))?\))?$/i', $sqlTypeDef, $match)) {
+        if (is_null($sqlTypeDef)) {
+            // in SQLite columns can legitimately have null as a type, which is distinct from the empty string
+            $type = null;
+        } elseif (!preg_match('/^([a-z]+)(_(?:integer|float|text|blob))?(?:\((\d+)(?:,(\d+))?\))?$/i', $sqlTypeDef, $match)) {
             $type = Literal::from($sqlTypeDef);
         } else {
             $type = $match[1];

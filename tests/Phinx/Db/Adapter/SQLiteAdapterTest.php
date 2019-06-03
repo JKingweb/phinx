@@ -440,8 +440,9 @@ class SQLiteAdapterTest extends TestCase
             [SQLiteAdapter::PHINX_TYPE_TIMESTAMP, null, SQLiteAdapter::PHINX_TYPE_TIMESTAMP . '_text'],
             [SQLiteAdapter::PHINX_TYPE_UUID, null, SQLiteAdapter::PHINX_TYPE_UUID . '_text'],
             [SQLiteAdapter::PHINX_TYPE_VARBINARY, null, SQLiteAdapter::PHINX_TYPE_VARBINARY . '_blob'],
-            ['notAType', null, $unsupported],
             [SQLiteAdapter::PHINX_TYPE_STRING, 5, 'varchar'],
+            [Literal::from('someType'), 5, Literal::from('someType')],
+            ['notAType', null, $unsupported],
         ];
     }
 
@@ -615,6 +616,7 @@ class SQLiteAdapterTest extends TestCase
             ['ACK_TEXT',        ['name' => Literal::from('ACK_TEXT'), 'limit' => null, 'scale' => null]],
             ['ack_text(2,12)',  ['name' => Literal::from('ack_text'), 'limit' => 2, 'scale' => 12]],
             ['ACK_TEXT(12,2)',  ['name' => Literal::from('ACK_TEXT'), 'limit' => 12, 'scale' => 2]],
+            [null,              ['name' => null, 'limit' => null, 'scale' => null]],
         ];
     }
 
