@@ -69,6 +69,25 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
         self::PHINX_TYPE_VARBINARY => 'varbinary_blob'
     ];
 
+    // list of aliases of supported column types
+    protected static $supportedColumnTypeAliases = [
+        'varchar' => self::PHINX_TYPE_STRING,
+        'tinyint' => self::PHINX_TYPE_SMALL_INTEGER,
+        'tinyinteger' => self::PHINX_TYPE_SMALL_INTEGER,
+        'smallint' => self::PHINX_TYPE_SMALL_INTEGER,
+        'int' => self::PHINX_TYPE_INTEGER,
+        'mediumint' => self::PHINX_TYPE_INTEGER,
+        'mediuminteger' => self::PHINX_TYPE_INTEGER,
+        'bigint' => self::PHINX_TYPE_BIG_INTEGER,
+        'tinytext' => self::PHINX_TYPE_TEXT,
+        'mediumtext' => self::PHINX_TYPE_TEXT,
+        'longtext' => self::PHINX_TYPE_TEXT,
+        'tinyblob' => self::PHINX_TYPE_BLOB,
+        'mediumblob' => self::PHINX_TYPE_BLOB,
+        'longblob' => self::PHINX_TYPE_BLOB,
+        'real' => self::PHINX_TYPE_FLOAT,
+    ];
+
     // list of known but unsupported Phinx column types
     protected static $unsupportedColumnTypes = [
         self::PHINX_TYPE_BIT,
@@ -1081,14 +1100,12 @@ PCRE_PATTERN;
         $columns = array_map('strtolower', (array)$columns);
         $primaryKey = array_map('strtolower', $this->getPrimaryKey($tableName));
 
-        if (array_diff($primaryKey, $columns)) {
+        if (array_diff($primaryKey, $columns) || array_diff($columns, $primaryKey)) {
             return false;
-        } elseif (array_diff($columns, $primaryKey)) {
-            return false;
-        } else {
+        }
+        
             return true;
         }
-    }
 
     /**
      * Get the primary key from a particular table.
@@ -1125,14 +1142,11 @@ PCRE_PATTERN;
 
         foreach ($foreignKeys as $key) {
             $key = array_map('strtolower', $key);
-            if (array_diff($key, $columns)) {
+            if (array_diff($key, $columns) || array_diff($columns, $key)) {
                 continue;
-            } elseif (array_diff($columns, $key)) {
-                continue;
-            } else {
+            }
                 return true;
             }
-        }
 
         return false;
     }
@@ -1331,7 +1345,7 @@ PCRE_PATTERN;
     /**
      * Returns Phinx type by SQL type
      *
-     * @param string $sqlTypeDef SQL type
+     * @param string|null $sqlTypeDef SQL type
      * @return array
      */
     public function getPhinxType($sqlTypeDef)
@@ -1340,97 +1354,38 @@ PCRE_PATTERN;
         $scale = null;
         if (is_null($sqlTypeDef)) {
             // in SQLite columns can legitimately have null as a type, which is distinct from the empty string
-            $type = null;
+            $name = null;
         } elseif (!preg_match('/^([a-z]+)(_(?:integer|float|text|blob))?(?:\((\d+)(?:,(\d+))?\))?$/i', $sqlTypeDef, $match)) {
-            $type = Literal::from($sqlTypeDef);
+            // doesn't match the pattern of a type we'd know about
+            $name = Literal::from($sqlTypeDef);
         } else {
+            // possibly a known type
             $type = $match[1];
+            $typeLC = strtolower($type);
             $affinity = isset($match[2]) ? $match[2] : '';
             $limit = isset($match[3]) && strlen($match[3]) ? (int)$match[3] : null;
             $scale = isset($match[4]) && strlen($match[4]) ? (int)$match[4] : null;
-            switch (strtolower($type)) {
-                case 'varchar':
-                    $type = static::PHINX_TYPE_STRING;
-                    break;
-                case 'tinyint':
-                case 'tinyinteger':
-                    if ($limit == 1) {
-                        $type = static::PHINX_TYPE_BOOLEAN;
+            if (isset(self::$supportedColumnTypes[$typeLC])) {
+                // the type is an explicitly supported type
+                $name = $typeLC;
+            } elseif ($typeLC === 'tinyint' && $limit == 1) {
+                // the type is a MySQL-style boolean
+                $name = static::PHINX_TYPE_BOOLEAN;
                         $limit = null;
+            } elseif (isset(self::$supportedColumnTypeAliases[$typeLC])) {
+                // the type is an alias for a supported type
+                $name = self::$supportedColumnTypeAliases[$typeLC];
+            } elseif (in_array($typeLC, self::$unsupportedColumnTypes)) {
+                // unsupported but known types are passed through lowercased, and without appended affinity
+                $name = Literal::from($typeLC);
                     } else {
-                        $type = static::PHINX_TYPE_SMALL_INTEGER;
-                    }
-                    break;
-                case 'smallint':
-                    $type = static::PHINX_TYPE_SMALL_INTEGER;
-                    break;
-                case 'int':
-                case 'mediumint':
-                case 'mediuminteger':
-                    $type = static::PHINX_TYPE_INTEGER;
-                    break;
-                case 'bigint':
-                    $type = static::PHINX_TYPE_BIG_INTEGER;
-                    break;
-                case 'tinytext':
-                case 'mediumtext':
-                case 'longtext':
-                    $type = static::PHINX_TYPE_TEXT;
-                    break;
-                case 'tinyblob':
-                case 'mediumblob':
-                case 'longblob':
-                    $type = static::PHINX_TYPE_BLOB;
-                    break;
-                case 'real':
-                case 'numeric':
-                    $type = self::PHINX_TYPE_FLOAT;
-                    break;
-                case self::PHINX_TYPE_STRING:
-                case self::PHINX_TYPE_CHAR:
-                case self::PHINX_TYPE_TEXT:
-                case self::PHINX_TYPE_DATETIME:
-                case self::PHINX_TYPE_TIMESTAMP:
-                case self::PHINX_TYPE_TIME:
-                case self::PHINX_TYPE_DATE:
-                case self::PHINX_TYPE_JSON:
-                case self::PHINX_TYPE_JSONB:
-                case self::PHINX_TYPE_UUID:
-                case self::PHINX_TYPE_SMALL_INTEGER:
-                case self::PHINX_TYPE_INTEGER:
-                case self::PHINX_TYPE_BIG_INTEGER:
-                case self::PHINX_TYPE_FLOAT:
-                case self::PHINX_TYPE_DOUBLE:
-                case self::PHINX_TYPE_BLOB:
-                case self::PHINX_TYPE_BINARY:
-                case self::PHINX_TYPE_VARBINARY:
-                case self::PHINX_TYPE_BOOLEAN:
-                    $type = strtolower($type);
-                    break;
-                case self::PHINX_TYPE_DECIMAL:
-                case self::PHINX_TYPE_BIT:
-                case self::PHINX_TYPE_GEOMETRY:
-                case self::PHINX_TYPE_POINT:
-                case self::PHINX_TYPE_LINESTRING:
-                case self::PHINX_TYPE_POLYGON:
-                case self::PHINX_TYPE_ENUM:
-                case self::PHINX_TYPE_SET:
-                case self::PHINX_TYPE_CIDR:
-                case self::PHINX_TYPE_INET:
-                case self::PHINX_TYPE_MACADDR:
-                case self::PHINX_TYPE_INTERVAL:
-                case self::PHINX_TYPE_FILESTREAM:
-                    // type is not supported, but we pass it through anyway
-                    $type = Literal::from(strtolower($type));
-                    break;
-                default:
-                    // type is unknown
-                    $type = Literal::from($type.$affinity);
+                // unknown types are passed through as-is
+                $name = Literal::from($type . $affinity);
             }
         }
 
         return [
-            'name' => $type,
+            'name' => $name,
             'limit' => $limit,
             'scale' => $scale
         ];
@@ -1488,9 +1443,6 @@ PCRE_PATTERN;
         }
         if ($column->getPrecision() && $column->getScale()) {
             $def .= '(' . $column->getPrecision() . ',' . $column->getScale() . ')';
-        }
-        if (($values = $column->getValues()) && is_array($values)) {
-            $def .= " CHECK({$this->quoteColumnName($column->getName())} IN ('" . implode("', '", $values) . "'))";
         }
 
         $default = $column->getDefault();
