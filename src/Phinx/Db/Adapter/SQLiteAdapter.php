@@ -676,11 +676,8 @@ PCRE_PATTERN;
                    ->setDefault($default)
                    ->setType($type['name'])
                    ->setLimit($type['limit'])
-                   ->setScale($type['scale']);
-
-            if ($columnInfo['name'] === $identity) {
-                $column->setIdentity(true);
-            }
+                   ->setScale($type['scale'])
+                   ->setIdentity($columnInfo['name'] === $identity);
 
             $columns[] = $column;
         }

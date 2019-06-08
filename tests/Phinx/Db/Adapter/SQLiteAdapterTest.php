@@ -697,6 +697,26 @@ class SQLiteAdapterTest extends TestCase
         ];
     }
 
+    /** @dataProvider provideDatabaseVersionStrings
+     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::databaseVersionAtLeast */
+    public function testDatabaseVersionAtLeast($ver, $exp)
+    {
+        $this->assertSame($exp, $this->adapter->databaseVersionAtLeast($ver));
+    }
+
+    public function provideDatabaseVersionStrings()
+    {
+        return [
+            ["2", true],
+            ["3", true],
+            ["4", false],
+            ["3.0", true],
+            ["3.0.0.0.0.0", true],
+            ["3.0.0.0.0.99999", true],
+            ["3.9999", false],
+        ];
+    }
+
     /** @dataProvider provideColumnNamesToCheck
      *  @covers \Phinx\Db\Adapter\SQLiteAdapter::getSchemaName
      *  @covers \Phinx\Db\Adapter\SQLiteAdapter::getTableInfo
@@ -729,23 +749,30 @@ class SQLiteAdapterTest extends TestCase
         ];
     }
 
-    /** @dataProvider provideDatabaseVersionStrings
-     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::databaseVersionAtLeast */
-    public function testDatabaseVersionAtLeast($ver, $exp)
+    /** @covers \Phinx\Db\Adapter\SQLiteAdapter::getSchemaName
+     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::getTableInfo
+     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::getColumns */
+    public function testGetColumns()
     {
-        $this->assertSame($exp, $this->adapter->databaseVersionAtLeast($ver));
+        $conn = $this->adapter->getConnection();
+        $conn->exec('create table t(a integer, b text, c char(5), d integer(12,6), e integer not null, f integer null)');
+        $exp = [
+            ['name' => 'a', 'type' => 'integer', 'null' => true,  'limit' => null, 'scale' => null],
+            ['name' => 'b', 'type' => 'text',    'null' => true,  'limit' => null, 'scale' => null],
+            ['name' => 'c', 'type' => 'char',    'null' => true,  'limit' => 5,    'scale' => null],
+            ['name' => 'd', 'type' => 'integer', 'null' => true,  'limit' => 12,   'scale' => 6],
+            ['name' => 'e', 'type' => 'integer', 'null' => false, 'limit' => null, 'scale' => null],
+            ['name' => 'f', 'type' => 'integer', 'null' => true,  'limit' => null, 'scale' => null],
+        ];
+        $act = $this->adapter->getColumns('t');
+        $this->assertCount(sizeof($exp), $act);
+        foreach ($exp as $index => $data) {
+            foreach ($data as $key => $value) {
+                $m = 'get' . ucfirst($key);
+                $this->assertEquals($value, $act[$index]->$m(), "Parameter '$key' of column at index $index did not match expectations.");
+            }
+        }
     }
 
-    public function provideDatabaseVersionStrings()
-    {
-        return [
-            ["2", true],
-            ["3", true],
-            ["4", false],
-            ["3.0", true],
-            ["3.0.0.0.0.0", true],
-            ["3.0.0.0.0.99999", true],
-            ["3.9999", false],
-        ];
-    }
+
 }
