@@ -774,5 +774,35 @@ class SQLiteAdapterTest extends TestCase
         }
     }
 
+    /** @dataProvider provideIdentityCandidates
+     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::resolveIdentity
+     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::getMasterTable
+     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::resolveTable */
+    public function testGetColumnsForIdentity($tableDef, $exp)
+    {
+        $conn = $this->adapter->getConnection();
+        $conn->exec($tableDef);
+        $cols = $this->adapter->getColumns('t');
+        $act = [];
+        foreach ($cols as $col) {
+            if ($col->getIdentity()) {
+                $act[] = $col->getName();
+            }
+        }
+        $this->assertEquals((array)$exp, $act);
+    }
 
+    public function provideIdentityCandidates()
+    {
+        return [
+            ['create table t(a text)', null],
+            ['create table t(a text primary key)', null],
+            ['create table t(a integer, b text, primary key(a,b))', null],
+            ['create table t(a integer primary key desc)', null],
+            ['create table t(a integer primary key) without rowid', null],
+            ['create table t(a integer primary key)', 'a'],
+            ['CREATE TABLE T(A INTEGER PRIMARY KEY)', 'A'],
+            ['create table t(a integer, primary key(a))', 'a'],
+        ];
+    }
 }

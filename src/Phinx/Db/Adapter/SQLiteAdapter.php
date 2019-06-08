@@ -334,7 +334,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
      */
     protected function getMasterTable($tableName)
     {
-        $schema = $this->resolveTable($tableName);
+        $schema = $this->resolveTable($tableName)['schema'];
         if ($schema === 'temp') {
             return 'sqlite_temp_master';
         } else {
@@ -572,20 +572,9 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
     protected function resolveIdentity($tableName)
     {
         $result = null;
-        $rowidNames = [
-            '_rowid_' => true,
-            'rowid' => true,
-            'oid' => true,
-        ];
         // make sure the table has only one primary key column which is of type integer
         foreach ($this->getTableInfo($tableName) as $col) {
-            $name = strtolower($col['name']);
             $type = strtolower($col['type']);
-            if (isset($rowidNames[$name])) {
-                // the column is using one of the names which may be used to refer to a row ID; 
-                // it cannot be used to find out whether a table is a WITHOUT ROWID table
-                $rowidNames[$name] = false;
-            }
             if ($col['pk'] > 1) {
                 // the table has a composite primary key
                 return null;
@@ -605,51 +594,9 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
             return null;
         }
         // make sure the table does not have a PK-origin autoindex
-        // such an autoindex would indicate either that the primary key was specified as a table constraint or that it was specified as descending
+        // such an autoindex would indicate either that the primary key was specified as descending, or that this is a WITHOUT ROWID table
         foreach ($this->getTableInfo($tableName, 'index_list') as $idx) {
             if ($idx['origin'] === 'pk') {
-                return null;
-            }
-        }
-        // make sure the table is not a WITHOUT ROWID table; these cannot have auto-incrementing IDs
-        $rowidNames = array_filter($rowidNames);
-        if ($rowidNames) {
-            // try to count the magic rowid column, unless all its names have been explicitly used
-            // performing this count on a WITHOUT ROWID table will produce an error
-            try {
-                $this->execute(sprintf('SELECT count(%s) from %s', array_keys($rowidNames)[0], $this->quoteTableName($tableName)));
-            } catch (\PDOException $e) {
-                return null;
-            }
-        } else {
-            // if all the names of the magic rowid column are used as names for concrete columns, we have to look at the SQL to know if a table is a WITHOUT ROWID table
-            // the pattern used here should cover all possible permutations, though it is rather complicated
-            $pattern = <<<PCRE_PATTERN
-                /^(?:                               # Any of...
-                    (?P<ws>                         # Whitespace, which can be...
-                        \s+|                        # Literal whitespace
-                        --[^\r\n]*|                 # Single-line comment
-                        \/\*(?:*(?!\/)|[^\*])*\*\/  # Multi-line comment
-                    )|
-                    '(?:[^']|'')*'|                 # String literal
-                    "(?:[^"]|"")*"|                 # Standard identifier
-                    `(?:[^`]|``)*`|                 # MySQL identifier
-                    \[[^\]]*\]|                     # SQL Server identifier
-                    .                               # Anything else
-                )*?                                 # Zero or more times, followed by...
-                WITHOUT(?P=ws)+ROWID                # the WITHOUT ROWID definition
-                (?P=ws)*                            # Followed by whitespace zero or more times
-                ;\$                                 # And ending with the terminal semicolon
-                /six
-PCRE_PATTERN;
-            $tableBareName = $this->getSchemaName($tableName)['table'];
-            $sql = $this->query(sprintf(
-                'select sql from %s where type = \'table\' and name = %s',
-                $this->getMasterTable($tableName),
-                $this->quoteString($tableBareName)
-            ))->fetchColumn();
-            if (preg_match($pattern, $sql)) {
-                // the table is a WITHOUT ROWID table and cannot have a rowid alias
                 return null;
             }
         }
