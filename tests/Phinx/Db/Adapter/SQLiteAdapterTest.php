@@ -3,9 +3,9 @@
 namespace Test\Phinx\Db\Adapter;
 
 use Phinx\Db\Adapter\SQLiteAdapter;
-use Phinx\Db\Adapter\PdoAdapter;
 use Phinx\Db\Table\Column;
 use Phinx\Util\Literal;
+use Phinx\Util\Expression;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Input\InputDefinition;
@@ -775,9 +775,7 @@ class SQLiteAdapterTest extends TestCase
     }
 
     /** @dataProvider provideIdentityCandidates
-     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::resolveIdentity
-     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::getMasterTable
-     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::resolveTable */
+     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::resolveIdentity */
     public function testGetColumnsForIdentity($tableDef, $exp)
     {
         $conn = $this->adapter->getConnection();
@@ -803,6 +801,82 @@ class SQLiteAdapterTest extends TestCase
             ['create table t(a integer primary key)', 'a'],
             ['CREATE TABLE T(A INTEGER PRIMARY KEY)', 'A'],
             ['create table t(a integer, primary key(a))', 'a'],
+        ];
+    }
+
+    /** @dataProvider provideDefaultValues
+     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::parseDefaultValue */
+    public function testGetColumnsForDefaults($tableDef, $exp)
+    {
+        $conn = $this->adapter->getConnection();
+        $conn->exec($tableDef);
+        $act = $this->adapter->getColumns('t')[0]->getDefault();
+        if (is_object($exp)) {
+            $this->assertEquals($exp, $act);
+        } else {
+            $this->assertSame($exp, $act);
+        }
+    }
+
+    public function provideDefaultValues()
+    {
+        return [
+            'Implicit null'          => ['create table t(a integer)', null],
+            'Explicit null LC'       => ['create table t(a integer default null)', null],
+            'Explicit null UC'       => ['create table t(a integer default NULL)', null],
+            'Explicit null MC'       => ['create table t(a integer default nuLL)', null],
+            'Extra parentheses'      => ['create table t(a integer default ( null ))', null],
+            'Comment 1'              => ["create table t(a integer default ( /* this is perfectly fine */ null ))", null],
+            'Comment 2'              => ["create table t(a integer default ( /* this\nis\nperfectly\nfine */ null ))", null],
+            'Line comment 1'         => ["create table t(a integer default ( -- this is perfectly fine, too\n null ))", null],
+            'Line comment 2'         => ["create table t(a integer default ( -- this is perfectly fine, too\r\n null ))", null],
+            'Current date LC'        => ['create table t(a date default current_date)', "CURRENT_DATE"],
+            'Current date UC'        => ['create table t(a date default CURRENT_DATE)', "CURRENT_DATE"],
+            'Current date MC'        => ['create table t(a date default CURRENT_date)', "CURRENT_DATE"],
+            'Current time LC'        => ['create table t(a time default current_time)', "CURRENT_TIME"],
+            'Current time UC'        => ['create table t(a time default CURRENT_TIME)', "CURRENT_TIME"],
+            'Current time MC'        => ['create table t(a time default CURRENT_time)', "CURRENT_TIME"],
+            'Current timestamp LC'   => ['create table t(a datetime default current_timestamp)', "CURRENT_TIMESTAMP"],
+            'Current timestamp UC'   => ['create table t(a datetime default CURRENT_TIMESTAMP)', "CURRENT_TIMESTAMP"],
+            'Current timestamp MC'   => ['create table t(a datetime default CURRENT_timestamp)', "CURRENT_TIMESTAMP"],
+            'String 1'               => ['create table t(a text default \'\')', Literal::from('')],
+            'String 2'               => ['create table t(a text default \'value!\')', Literal::from('value!')],
+            'String 3'               => ['create table t(a text default \'O\'\'Brien\')', Literal::from('O\'Brien')],
+            'String 4'               => ['create table t(a text default \'CURRENT_TIMESTAMP\')', Literal::from('CURRENT_TIMESTAMP')],
+            'String 5'               => ['create table t(a text default \'current_timestamp\')', Literal::from('current_timestamp')],
+            'String 6'               => ['create table t(a text default \'\' /* comment */)', Literal::from('')],
+            'Hexadecimal LC'         => ['create table t(a integer default 0xff)', 255],
+            'Hexadecimal UC'         => ['create table t(a integer default 0XFF)', 255],
+            'Hexadecimal MC'         => ['create table t(a integer default 0x1F)', 31],
+            'True LC'                => ['create table t(a tinyint(1) default true)', true],
+            'True UC'                => ['create table t(a tinyint(1) default TRUE)', true],
+            'True MC'                => ['create table t(a tinyint(1) default TRue)', true],
+            'False LC'               => ['create table t(a tinyint(1) default false)', false],
+            'False UC'               => ['create table t(a tinyint(1) default FALSE)', false],
+            'False MC'               => ['create table t(a tinyint(1) default FALse)', false],
+            'Integer 1'              => ['create table t(a integer default 1)', 1],
+            'Integer 2'              => ['create table t(a integer default -1)', -1],
+            'Integer 3'              => ['create table t(a integer default +1)', 1],
+            'Integer 4'              => ['create table t(a integer default 2112)', 2112],
+            'Integer 5'              => ['create table t(a integer default 002112)', 2112],
+            'Integer boolean 1'      => ['create table t(a tinyint(1) default 1)', true],
+            'Integer boolean 2'      => ['create table t(a tinyint(1) default 0)', false],
+            'Integer boolean 3'      => ['create table t(a tinyint(1) default -1)', -1],
+            'Integer boolean 4'      => ['create table t(a tinyint(1) default 2)', 2],
+            'Float 1'                => ['create table t(a float default 1.0)', 1.0],
+            'Float 2'                => ['create table t(a float default +1.0)', 1.0],
+            'Float 3'                => ['create table t(a float default -1.0)', -1.0],
+            'Float 4'                => ['create table t(a float default 1.)', 1.0],
+            'Float 5'                => ['create table t(a float default 0.1)', 0.1],
+            'Float 6'                => ['create table t(a float default .1)', 0.1],
+            'Float 7'                => ['create table t(a float default 1e0)', 1.0],
+            'Float 8'                => ['create table t(a float default 1e+0)', 1.0],
+            'Float 9'                => ['create table t(a float default 1e+1)', 10.0],
+            'Float 10'               => ['create table t(a float default 1e-1)', 0.1],
+            'Blob literal'           => ['create table t(a float default x\'ff\')', Expression::from('x\'ff\'')],
+            'Arbitrary expression'   => ['create table t(a float default ((2) + (2)))', Expression::from('(2) + (2)')],
+            'Pathological case 1'    => ['create table t(a float default (\'/*\' || \'*/\'))', Expression::from('\'/*\' || \'*/\'')],
+            'Pathological case 2'    => ['create table t(a float default (\'--\' || \'stuff\'))', Expression::from('\'--\' || \'stuff\'')],
         ];
     }
 }

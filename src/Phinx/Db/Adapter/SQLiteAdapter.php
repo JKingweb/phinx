@@ -36,6 +36,7 @@ use Phinx\Db\Table\Index;
 use Phinx\Db\Table\Table;
 use Phinx\Db\Util\AlterInstructions;
 use Phinx\Util\Literal;
+use Phinx\Util\Expression;
 
 /**
  * Phinx SQLite Adapter.
@@ -506,7 +507,6 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
     }
 
     /**
-     *
      * Parses a default-value expression to yield either a Literal representing
      * a string value, a string representing an expression, or some other scalar
      *
@@ -537,12 +537,11 @@ PCRE_PATTERN;
         preg_match_all($pattern, $v, $matches);
         // strip out any comment tokens
         $matches = array_map(function ($v) {
-            return preg_match('<^/*|-->', $v) ? ' ' : $v;
+            return preg_match('/^(?:\/\*|--)/', $v) ? ' ' : $v;
         }, $matches[0]);
         // reconstitute the string, trimming whitespace as well as parentheses
         $vClean = trim(implode('', $matches));
         $vBare = rtrim(ltrim($vClean, $trimChars . '('), $trimChars . ')');
-
         if (preg_match('/^true|false$/i', $vBare)) {
             // boolean literal
             return filter_var($vClean, \FILTER_VALIDATE_BOOLEAN);
@@ -551,17 +550,17 @@ PCRE_PATTERN;
             return strtoupper($vBare);
         } elseif (preg_match('/^\'(?:[^\']|\'\')*\'$/i', $vBare)) {
             // string literal
-            return Literal::from($vBare);
-        } elseif (preg_match('/^[+-]?\d+(?:\.0*)?(?:e\+?\d+)$/i', $vBare)) {
+            $str = str_replace("''", "'", substr($vBare, 1, strlen($vBare) - 2));
+            return Literal::from($str);
+        } elseif (preg_match('/^[+-]?\d+$/i', $vBare)) {
+            $int = (int)$vBare;
             // integer literal
-            if ($t === self::PHINX_TYPE_BOOLEAN) {
-                return (bool)$vBare;
-            } elseif ($t === self::PHINX_TYPE_FLOAT) {
-                return (float)$vBare;
+            if ($t === self::PHINX_TYPE_BOOLEAN && ($int == 0 || $int == 1)) {
+                return (bool)$int;
             } else {
-                return (int)$vBare;
+                return $int;
             }
-        } elseif (preg_match('/^[+-]?\d*\.\d+(?:e\[+-]?\d+)$/i', $vBare)) {
+        } elseif (preg_match('/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i', $vBare)) {
             // float literal
             return (float)$vBare;
         } elseif (preg_match('/^0x[0-9a-f]+$/i', $vBare)) {
@@ -572,7 +571,7 @@ PCRE_PATTERN;
             return null;
         } else {
             // any other expression: return the expression with parentheses, but without comments
-            return $vClean;
+            return Expression::from($vClean);
         }
     }
 
