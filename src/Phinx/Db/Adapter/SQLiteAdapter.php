@@ -516,48 +516,63 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
      */
     protected function parseDefaultValue($v, $t)
     {
-
         if (is_null($v)) {
             return null;
         }
 
-        $matchPattern = function ($p, $v, &$m = null) {
-            // this whole process is complicated by an SQLite bug; see http://sqlite.1065341.n5.nabble.com/Bug-in-table-info-pragma-td107176.html
-            $out = preg_match("/^($p)(?:\s*(?:\/\*|--))?/i", $v, $m);
-            if ($m) {
-                array_shift($m);
-            }
-            return $out;
-        };
+        // split the input into tokens
+        $trimChars = " \t\n\r\0\x0B";
+        $pattern = <<<PCRE_PATTERN
+            /
+                '(?:[^']|'')*'|                 # String literal
+                "(?:[^"]|"")*"|                 # Standard identifier
+                `(?:[^`]|``)*`|                 # MySQL identifier
+                \[[^\]]*\]|                     # SQL Server identifier
+                --[^\r\n]*|                     # Single-line comment
+                \/\*(?:\*(?!\/)|[^\*])*\*\/|    # Multi-line comment
+               [^\/\-]+|                        # Other non-special characters
+               .                                # Anything else
+            /sx
+PCRE_PATTERN;
+        preg_match_all($pattern, $v, $matches);
+        // strip out any comment tokens
+        $matches = array_map(function ($v) {
+            return preg_match('<^/*|-->', $v) ? ' ' : $v;
+        }, $matches[0]);
+        // reconstitute the string, trimming whitespace as well as parentheses
+        $vClean = trim(implode('', $matches));
+        $vBare = rtrim(ltrim($vClean, $trimChars . '('), $trimChars . ')');
 
-        if ($matchPattern("'((?:[^']|'')*)'", $v, $m)) {
+        if (preg_match('/^true|false$/i', $vBare)) {
+            // boolean literal
+            return filter_var($vClean, \FILTER_VALIDATE_BOOLEAN);
+        } elseif (preg_match('/^CURRENT_(?:DATE|TIME|TIMESTAMP)$/i', $vBare)) {
+            // magic date or time
+            return strtoupper($vBare);
+        } elseif (preg_match('/^\'(?:[^\']|\'\')*\'$/i', $vBare)) {
             // string literal
-            return Literal::from(str_replace("''", "'", $m[1]));
-        } elseif ($matchPattern('current_(?:date|time(?:stamp)?)', $v, $m)) {
-            // magic date/time keywords
-            return strtoupper($m[0]);
-        } elseif ($matchPattern("[-+]?(\d+(?:\.\d*)?|\.\d+)(e[-+]?\d+)?", $v, $m)) {
-            // decimal number; see https://sqlite.org/syntax/numeric-literal.html
+            return Literal::from($vBare);
+        } elseif (preg_match('/^[+-]?\d+(?:\.0*)?(?:e\+?\d+)$/i', $vBare)) {
+            // integer literal
             if ($t === self::PHINX_TYPE_BOOLEAN) {
-                return (bool)(float)$m[0];
-            } elseif (abs(fmod((float)$m[0], 1)) > 0) {
-                return (float)$m[0];
+                return (bool)$vBare;
+            } elseif ($t === self::PHINX_TYPE_FLOAT) {
+                return (float)$vBare;
             } else {
-                return (int)$m[0];
+                return (int)$vBare;
             }
-        } elseif ($matchPattern('0x([0-9a-f]+)', $v, $m)) {
+        } elseif (preg_match('/^[+-]?\d*\.\d+(?:e\[+-]?\d+)$/i', $vBare)) {
+            // float literal
+            return (float)$vBare;
+        } elseif (preg_match('/^0x[0-9a-f]+$/i', $vBare)) {
             // hexadecimal literal
-            return hexdec($m[1]);
-        } elseif ($matchPattern('true|false', $v)) {
-            // boolean literal (since SQLite 3.23)
-            return (strtolower($v[0]) === 't');
-        } elseif ($matchPattern('null', $v)) {
-            // explicit null
+            return hexdec(substr($vBare, 2));
+        } elseif (preg_match('/^null$/i', $vBare)) {
+            // null literal
             return null;
         } else {
-            // some other expression
-            // this includes blob literals, and arbitrary expressions
-            return $v;
+            // any other expression: return the expression with parentheses, but without comments
+            return $vClean;
         }
     }
 
