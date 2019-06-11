@@ -757,16 +757,17 @@ class SQLiteAdapterTest extends TestCase
         $conn = $this->adapter->getConnection();
         $conn->exec('create table t(a integer, b text, c char(5), d integer(12,6), e integer not null, f integer null)');
         $exp = [
-            ['name' => 'a', 'type' => 'integer', 'null' => true,  'limit' => null, 'scale' => null],
-            ['name' => 'b', 'type' => 'text',    'null' => true,  'limit' => null, 'scale' => null],
-            ['name' => 'c', 'type' => 'char',    'null' => true,  'limit' => 5,    'scale' => null],
-            ['name' => 'd', 'type' => 'integer', 'null' => true,  'limit' => 12,   'scale' => 6],
-            ['name' => 'e', 'type' => 'integer', 'null' => false, 'limit' => null, 'scale' => null],
-            ['name' => 'f', 'type' => 'integer', 'null' => true,  'limit' => null, 'scale' => null],
+            ['name' => 'a', 'type' => 'integer', 'null' => true,  'limit' => null, 'precision' => null, 'scale' => null],
+            ['name' => 'b', 'type' => 'text',    'null' => true,  'limit' => null, 'precision' => null, 'scale' => null],
+            ['name' => 'c', 'type' => 'char',    'null' => true,  'limit' => 5,    'precision' => 5,    'scale' => null],
+            ['name' => 'd', 'type' => 'integer', 'null' => true,  'limit' => 12,   'precision' => 12,   'scale' => 6],
+            ['name' => 'e', 'type' => 'integer', 'null' => false, 'limit' => null, 'precision' => null, 'scale' => null],
+            ['name' => 'f', 'type' => 'integer', 'null' => true,  'limit' => null, 'precision' => null, 'scale' => null],
         ];
         $act = $this->adapter->getColumns('t');
         $this->assertCount(sizeof($exp), $act);
         foreach ($exp as $index => $data) {
+            $this->assertInstanceOf(Column::class, $act[$index]);
             foreach ($data as $key => $value) {
                 $m = 'get' . ucfirst($key);
                 $this->assertEquals($value, $act[$index]->$m(), "Parameter '$key' of column at index $index did not match expectations.");
@@ -825,7 +826,7 @@ class SQLiteAdapterTest extends TestCase
             'Explicit null LC'       => ['create table t(a integer default null)', null],
             'Explicit null UC'       => ['create table t(a integer default NULL)', null],
             'Explicit null MC'       => ['create table t(a integer default nuLL)', null],
-            'Extra parentheses'      => ['create table t(a integer default ( null ))', null],
+            'Extra parentheses'      => ['create table t(a integer default ( ( null ) ))', null],
             'Comment 1'              => ["create table t(a integer default ( /* this is perfectly fine */ null ))", null],
             'Comment 2'              => ["create table t(a integer default ( /* this\nis\nperfectly\nfine */ null ))", null],
             'Line comment 1'         => ["create table t(a integer default ( -- this is perfectly fine, too\n null ))", null],
@@ -848,21 +849,15 @@ class SQLiteAdapterTest extends TestCase
             'Hexadecimal LC'         => ['create table t(a integer default 0xff)', 255],
             'Hexadecimal UC'         => ['create table t(a integer default 0XFF)', 255],
             'Hexadecimal MC'         => ['create table t(a integer default 0x1F)', 31],
-            'True LC'                => ['create table t(a tinyint(1) default true)', true],
-            'True UC'                => ['create table t(a tinyint(1) default TRUE)', true],
-            'True MC'                => ['create table t(a tinyint(1) default TRue)', true],
-            'False LC'               => ['create table t(a tinyint(1) default false)', false],
-            'False UC'               => ['create table t(a tinyint(1) default FALSE)', false],
-            'False MC'               => ['create table t(a tinyint(1) default FALse)', false],
             'Integer 1'              => ['create table t(a integer default 1)', 1],
             'Integer 2'              => ['create table t(a integer default -1)', -1],
             'Integer 3'              => ['create table t(a integer default +1)', 1],
             'Integer 4'              => ['create table t(a integer default 2112)', 2112],
             'Integer 5'              => ['create table t(a integer default 002112)', 2112],
-            'Integer boolean 1'      => ['create table t(a tinyint(1) default 1)', true],
-            'Integer boolean 2'      => ['create table t(a tinyint(1) default 0)', false],
-            'Integer boolean 3'      => ['create table t(a tinyint(1) default -1)', -1],
-            'Integer boolean 4'      => ['create table t(a tinyint(1) default 2)', 2],
+            'Integer boolean 1'      => ['create table t(a boolean default 1)', true],
+            'Integer boolean 2'      => ['create table t(a boolean default 0)', false],
+            'Integer boolean 3'      => ['create table t(a boolean default -1)', -1],
+            'Integer boolean 4'      => ['create table t(a boolean default 2)', 2],
             'Float 1'                => ['create table t(a float default 1.0)', 1.0],
             'Float 2'                => ['create table t(a float default +1.0)', 1.0],
             'Float 3'                => ['create table t(a float default -1.0)', -1.0],
@@ -873,12 +868,41 @@ class SQLiteAdapterTest extends TestCase
             'Float 8'                => ['create table t(a float default 1e+0)', 1.0],
             'Float 9'                => ['create table t(a float default 1e+1)', 10.0],
             'Float 10'               => ['create table t(a float default 1e-1)', 0.1],
-            'Float 10'               => ['create table t(a float default 1E-1)', 0.1],
+            'Float 11'               => ['create table t(a float default 1E-1)', 0.1],
             'Blob literal 1'         => ['create table t(a float default x\'ff\')', Expression::from('x\'ff\'')],
             'Blob literal 2'         => ['create table t(a float default X\'FF\')', Expression::from('X\'FF\'')],
             'Arbitrary expression'   => ['create table t(a float default ((2) + (2)))', Expression::from('(2) + (2)')],
             'Pathological case 1'    => ['create table t(a float default (\'/*\' || \'*/\'))', Expression::from('\'/*\' || \'*/\'')],
             'Pathological case 2'    => ['create table t(a float default (\'--\' || \'stuff\'))', Expression::from('\'--\' || \'stuff\'')],
+        ];
+    }
+
+    /** @dataProvider provideBooleanDefaultValues
+     *  @covers \Phinx\Db\Adapter\SQLiteAdapter::parseDefaultValue */
+    public function testGetColumnsForBooleanDefaults($tableDef, $exp)
+    {
+        if (!$this->adapter->databaseVersionAtLeast('3.24')) {
+            $this->markTestSkipped('SQLite 3.24.0 or later is required for this test.');
+        }
+        $conn = $this->adapter->getConnection();
+        $conn->exec($tableDef);
+        $act = $this->adapter->getColumns('t')[0]->getDefault();
+        if (is_object($exp)) {
+            $this->assertEquals($exp, $act);
+        } else {
+            $this->assertSame($exp, $act);
+        }
+    }
+
+    public function provideBooleanDefaultValues()
+    {
+        return [
+            'True LC'  => ['create table t(a boolean default true)', true],
+            'True UC'  => ['create table t(a boolean default TRUE)', true],
+            'True MC'  => ['create table t(a boolean default TRue)', true],
+            'False LC' => ['create table t(a boolean default false)', false],
+            'False UC' => ['create table t(a boolean default FALSE)', false],
+            'False MC' => ['create table t(a boolean default FALse)', false],
         ];
     }
 }

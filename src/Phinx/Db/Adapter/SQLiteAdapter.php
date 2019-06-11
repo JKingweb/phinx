@@ -125,21 +125,9 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
      */
     public function databaseVersionAtLeast($ver)
     {
-        $ver = array_map('intval', explode('.', $ver));
         $actual = $this->query('SELECT sqlite_version()')->fetchColumn();
-        $actual = array_map('intval', explode('.', $actual));
-        $actual = array_pad($actual, sizeof($ver), 0);
-
-        for ($a = 0; $a < sizeof($ver); $a++) {
-            if ($actual[$a] < $ver[$a]) {
-                return false;
-            } elseif ($actual[$a] > $ver[$a]) {
-                return true;
-            }
+        return version_compare($actual, $ver, '>=');
         }
-
-        return true;
-    }
 
     /**
      * {@inheritdoc}
@@ -530,8 +518,8 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
                 \[[^\]]*\]|                     # SQL Server identifier
                 --[^\r\n]*|                     # Single-line comment
                 \/\*(?:\*(?!\/)|[^\*])*\*\/|    # Multi-line comment
-               [^\/\-]+|                        # Other non-special characters
-               .                                # Anything else
+                [^\/\-]+|                       # Non-special characters
+                .                               # Any other single character
             /sx
 PCRE_PATTERN;
         preg_match_all($pattern, $v, $matches);
@@ -542,10 +530,9 @@ PCRE_PATTERN;
         // reconstitute the string, trimming whitespace as well as parentheses
         $vClean = trim(implode('', $matches));
         $vBare = rtrim(ltrim($vClean, $trimChars . '('), $trimChars . ')');
-        if (preg_match('/^true|false$/i', $vBare)) {
-            // boolean literal
-            return filter_var($vClean, \FILTER_VALIDATE_BOOLEAN);
-        } elseif (preg_match('/^CURRENT_(?:DATE|TIME|TIMESTAMP)$/i', $vBare)) {
+
+        // match the string against one of several patterns
+        if (preg_match('/^CURRENT_(?:DATE|TIME|TIMESTAMP)$/i', $vBare)) {
             // magic date or time
             return strtoupper($vBare);
         } elseif (preg_match('/^\'(?:[^\']|\'\')*\'$/i', $vBare)) {
@@ -569,6 +556,9 @@ PCRE_PATTERN;
         } elseif (preg_match('/^null$/i', $vBare)) {
             // null literal
             return null;
+        } elseif (preg_match('/^true|false$/i', $vBare)) {
+            // boolean literal
+            return filter_var($vClean, \FILTER_VALIDATE_BOOLEAN);
         } else {
             // any other expression: return the expression with parentheses, but without comments
             return Expression::from($vClean);
