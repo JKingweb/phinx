@@ -119,7 +119,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
     protected $suffix = '.sqlite3';
 
     /** Indicates whether the database library version is at least the specified version
-     * 
+     *
      * @param string $ver The version to check against e.g. '3.28.0'
      * @return boolean
      */
@@ -127,7 +127,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
     {
         $actual = $this->query('SELECT sqlite_version()')->fetchColumn();
         return version_compare($actual, $ver, '>=');
-        }
+    }
 
     /**
      * {@inheritdoc}
@@ -284,11 +284,11 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
                     $schemata[] = $row['name'];
                 }
             }
-            $default = 'main';
+            $defaultSchema = 'main';
         } else {
             // otherwise we search just the specified schema
             $schemata = (array)$info['schema'];
-            $default = $info['schema'];
+            $defaultSchema = $info['schema'];
         }
 
         $table = strtolower($info['table']);
@@ -302,19 +302,19 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
                 $rows = $this->fetchAll(sprintf('SELECT name FROM %s WHERE type=\'table\' AND lower(name) = %s', $master, $this->quoteString($table)));
             } catch (\PDOException $e) {
                 // an exception can occur if the schema part of the table refers to a database which is not attached
-                return ['schema' => $default, 'exists' => false];
+                break;
             }
 
             // this somewhat pedantic check with strtolower is performed because the SQL lower function may be redefined,
             // and can act on all Unicode characters if the ICU extension is loaded, while SQL identifiers are only case-insensitive for ASCII
             foreach ($rows as $row) {
                 if (strtolower($row['name']) === $table) {
-                    return ['schema' => $schema, 'exists' => true];
+                    return ['schema' => $schema, 'table' => $row['name'], 'exists' => true];
                 }
             }
         }
 
-        return ['schema' => $default, 'exists' => false];
+        return ['schema' => $defaultSchema, 'table' => $info['table'], 'exists' => false];
     }
 
     /**
@@ -486,12 +486,23 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
      */
     public function truncateTable($tableName)
     {
-        $sql = sprintf(
-            'DELETE FROM %s',
-            $this->quoteTableName($tableName)
-        );
+        $info = $this->resolveTable($tableName);
+        // first try deleting the rows
+        $this->execute(sprintf(
+            'DELETE FROM %s.%s',
+            $this->quoteColumnName($info['schema']),
+            $this->quoteColumnName($info['table'])
+        ));
 
-        $this->execute($sql);
+        // assuming no error occurred, reset the autoincrement (if any)
+        if ($this->hasTable($info['schema'] . '.sqlite_sequence')) {
+            $this->execute(sprintf(
+                'DELETE FROM %s.%s where name  = %s',
+                $this->quoteColumnName($info['schema']),
+                'sqlite_sequence',
+                $this->quoteString($info['table'])
+            ));
+        }
     }
 
     /**
@@ -567,7 +578,7 @@ PCRE_PATTERN;
 
     /**
      * Returns the name of the specified table's identity column, or null if the table has no identity
-     * 
+     *
      * The process of finding an identity column is somewhat convoluted as SQLite has no direct way of querying whether a given column is an alias for the table's row ID
      *
      * @param string $tableName The name of the table
@@ -1053,7 +1064,7 @@ PCRE_PATTERN;
         }
         
             return true;
-        }
+    }
 
     /**
      * Get the primary key from a particular table.
@@ -1094,7 +1105,7 @@ PCRE_PATTERN;
                 continue;
             }
                 return true;
-            }
+        }
 
         return false;
     }
@@ -1326,7 +1337,7 @@ PCRE_PATTERN;
             } elseif (in_array($typeLC, self::$unsupportedColumnTypes)) {
                 // unsupported but known types are passed through lowercased, and without appended affinity
                 $name = Literal::from($typeLC);
-                    } else {
+            } else {
                 // unknown types are passed through as-is
                 $name = Literal::from($type . $affinity);
             }
