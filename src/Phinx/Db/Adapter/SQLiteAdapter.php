@@ -264,6 +264,19 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
     }
 
     /**
+     * Retrieves information about a given table from one of the SQLite pragmas
+     *
+     * @param string $tableName The table to query
+     * @param string $pragma The pragma to query
+     * @return array
+     */
+    protected function getTableInfo($tableName, $pragma = 'table_info')
+    {
+        $info = $this->getSchemaName($tableName, true);
+        return $this->fetchAll(sprintf('PRAGMA %s%s(%s)', $info['schema'], $pragma, $info['table']));
+    }
+
+    /**
      * Searches through all available schemata to find a table and returns an array
      * containing the bare schema name and whether the table exists at all.
      * If no schema was specified and the table does not exist the "main" schema is returned
@@ -293,7 +306,7 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
 
         $table = strtolower($info['table']);
         foreach ($schemata as $schema) {
-            if ($schema === 'temp') {
+            if (strtolower($schema) === 'temp') {
                 $master = 'sqlite_temp_master';
             } else {
                 $master = sprintf('%s.%s', $this->quoteColumnName($schema), 'sqlite_master');
@@ -315,33 +328,6 @@ class SQLiteAdapter extends PdoAdapter implements AdapterInterface
         }
 
         return ['schema' => $defaultSchema, 'table' => $info['table'], 'exists' => false];
-    }
-
-    /**
-     * Returns the SQLite "master" table which contains information about
-     * objects (viz. indices, views, triggers) associated with a table
-     */
-    protected function getMasterTable($tableName)
-    {
-        $schema = $this->resolveTable($tableName)['schema'];
-        if ($schema === 'temp') {
-            return 'sqlite_temp_master';
-        } else {
-            return sprintf('%s.sqlite_master', $schema);
-        }
-    }
-
-    /**
-     * Retrieves information about a given table from one of the SQLite pragmas
-     *
-     * @param string $tableName The table to query
-     * @param string $pragma The pragma to query
-     * @return array
-     */
-    protected function getTableInfo($tableName, $pragma = 'table_info')
-    {
-        $info = $this->getSchemaName($tableName, true);
-        return $this->fetchAll(sprintf('PRAGMA %s%s(%s)', $info['schema'], $pragma, $info['table']));
     }
 
     /**
@@ -1063,7 +1049,7 @@ PCRE_PATTERN;
             return false;
         }
         
-            return true;
+        return true;
     }
 
     /**
@@ -1104,7 +1090,7 @@ PCRE_PATTERN;
             if (array_diff($key, $columns) || array_diff($columns, $key)) {
                 continue;
             }
-                return true;
+            return true;
         }
 
         return false;
@@ -1330,7 +1316,7 @@ PCRE_PATTERN;
             } elseif ($typeLC === 'tinyint' && $limit == 1) {
                 // the type is a MySQL-style boolean
                 $name = static::PHINX_TYPE_BOOLEAN;
-                        $limit = null;
+                $limit = null;
             } elseif (isset(self::$supportedColumnTypeAliases[$typeLC])) {
                 // the type is an alias for a supported type
                 $name = self::$supportedColumnTypeAliases[$typeLC];
